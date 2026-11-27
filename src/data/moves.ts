@@ -553,11 +553,11 @@ export const MOVE_BY_ID: Record<string, Move> = Object.fromEntries(MOVES.map((m)
 
 export const CAT_META: Record<Category, { label: string; color: string }> = {
   warmup: { label: 'Warm-up', color: '#ffc766' },
-  strength: { label: 'Strength', color: '#ff8a5c' },
+  strength: { label: 'Strength', color: '#ff7a4d' },
   core: { label: 'Core', color: '#ffb057' },
   pilates: { label: 'Pilates', color: '#ff7eb6' },
   yoga: { label: 'Yoga', color: '#b69cff' },
   stretch: { label: 'Stretch', color: '#5fd8c0' },
   breath: { label: 'Breath', color: '#78c6ff' },
-  rest: { label: 'Rest', color: '#9aa7ff' },
+  rest: { label: 'Rest', color: '#3cc9b5' },
 }
