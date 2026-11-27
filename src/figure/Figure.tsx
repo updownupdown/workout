@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Anim, compile, place, poseAt } from './anim'
-import { L, Limb, Pose, Rig, solve } from './skeleton'
+import { Anim, BandPoint, compile, place, poseAt } from './anim'
+import { L, Limb, Pose, Pt, Rig, solve } from './skeleton'
+import type { Muscle } from '../data/moves'
 
 interface Props {
   anim: Anim
@@ -13,6 +14,8 @@ interface Props {
   floor?: boolean
   className?: string
   title?: string
+  /** Muscles to light up with a soft glow in the accent colour. */
+  work?: Muscle[]
 }
 
 const seg = (l: Limb, extra?: Partial<React.SVGProps<SVGLineElement>>) => (
@@ -99,7 +102,88 @@ function Dumbbell({ l }: { l: Limb }) {
   )
 }
 
-export function Figure({ anim, t, tempo, flip, accent = '#ff8a65', ghost, floor = true, className, title }: Props) {
+const lerp = (a: Pt, b: Pt, k: number) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k })
+
+/** Soft halo behind the working muscles. */
+function Glow({ rig, work }: { rig: Rig; work: Muscle[] }) {
+  const w = new Set(work)
+  const out: React.ReactNode[] = []
+  const line = (l: Limb, k: string, extra = 10) => out.push(seg(l, { key: k, strokeWidth: l.w + extra }))
+  const dot = (p: Pt, r: number, k: string) => out.push(<circle key={k} cx={p.x} cy={p.y} r={r} />)
+  for (const [n, s] of [['l', rig.l], ['r', rig.r]] as const) {
+    if (w.has('arms')) {
+      line(s.upper, n + 'ua')
+      line(s.fore, n + 'fa', 8)
+    } else if (w.has('shoulders')) {
+      line({ a: s.upper.a, b: lerp(s.upper.a, s.upper.b, 0.45), w: s.upper.w }, n + 'sh', 12)
+    }
+    if (w.has('legs')) {
+      line(s.thigh, n + 'th')
+      line(s.shin, n + 'sn', 8)
+    } else if (w.has('calves')) line(s.shin, n + 'sn', 8)
+  }
+  if (w.has('chest') || w.has('back')) line(rig.chest, 'ch', 12)
+  if (w.has('core')) line(rig.torso, 'co', 12)
+  if (w.has('glutes')) dot(rig.pelvis, 19, 'gl')
+  if (!out.length) return null
+  return (
+    <g className="fig-glow" strokeLinecap="round">
+      {out}
+    </g>
+  )
+}
+
+function bandPt(rig: Rig, p: BandPoint): Pt {
+  switch (p) {
+    case 'lHand': return rig.l.hand.a
+    case 'rHand': return rig.r.hand.a
+    case 'lFoot': return rig.l.foot.a
+    case 'rFoot': return rig.r.foot.a
+    case 'lToe': return lerp(rig.l.foot.a, rig.l.foot.b, 0.7)
+    case 'rToe': return lerp(rig.r.foot.a, rig.r.foot.b, 0.7)
+    case 'lKnee': return rig.l.thigh.b
+    case 'rKnee': return rig.r.thigh.b
+    default: return rig.r.foot.b
+  }
+}
+
+/** Resistance band: a taut line between two points, or a loop just above the knees. */
+function Band({ rig, band, view }: { rig: Rig; band: NonNullable<Anim['band']>; view: 'side' | 'front' }) {
+  if (band === 'thighs') {
+    const a = lerp(rig.l.thigh.a, rig.l.thigh.b, 0.72)
+    const b = lerp(rig.r.thigh.a, rig.r.thigh.b, 0.72)
+    if (view === 'front') {
+      return (
+        <g className="fig-band">
+          <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} />
+        </g>
+      )
+    }
+    // Side view: a short strap wrapped across the near thigh.
+    const t = rig.r.thigh
+    const dx = t.b.x - t.a.x
+    const dy = t.b.y - t.a.y
+    const len = Math.hypot(dx, dy) || 1
+    const px = (-dy / len) * (t.w / 2 + 2)
+    const py = (dx / len) * (t.w / 2 + 2)
+    return (
+      <g className="fig-band">
+        <line x1={b.x - px} y1={b.y - py} x2={b.x + px} y2={b.y + py} />
+      </g>
+    )
+  }
+  return (
+    <g className="fig-band">
+      {band.map(([p, q], i) => {
+        const a = bandPt(rig, p)
+        const b = bandPt(rig, q)
+        return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} />
+      })}
+    </g>
+  )
+}
+
+export function Figure({ anim, t, tempo, flip, accent = '#ff8a65', ghost, floor = true, className, title, work }: Props) {
   const c = compile(anim)
   const pose: Pose = poseAt(c, t, tempo)
   const rig = place(solve(pose, anim.view), anim.anchor)
@@ -129,12 +213,14 @@ export function Figure({ anim, t, tempo, flip, accent = '#ff8a65', ghost, floor 
             <line className="fig-floor" x1={x0 - 400} x2={x1 + 400} y1={0.5} y2={0.5} />
           </>
         )}
+        {work && work.length > 0 && <Glow rig={rig} work={work} />}
         {ghostRig && (
           <g className="fig-ghost">
             <Body rig={ghostRig} view={anim.view} dumbbells={false} />
           </g>
         )}
         <Body rig={rig} view={anim.view} dumbbells={anim.props === 'dumbbells'} />
+        {anim.band && <Band rig={rig} band={anim.band} view={anim.view} />}
       </g>
     </svg>
   )

@@ -1,15 +1,16 @@
-import { useState } from 'react'
-import { ArrowLeftRight, ChevronLeft, Clock, Layers, Moon, Play, RefreshCw, Repeat, Shuffle, Sunrise, Timer, Wind, Zap, Flower } from 'lucide-react'
-import { Block, Prefs, readyOf, Session, Step, swapMove } from '../engine/generator'
+import { useEffect, useState } from 'react'
+import { ArrowLeftRight, ChevronLeft, Clock, Gauge, Layers, Moon, Play, RefreshCw, Repeat, Share2, Shuffle, Sunrise, Timer, Wind, Zap, Flower } from 'lucide-react'
+import { Block, encodeSession, Prefs, readyOf, Session, Step, swapMove } from '../engine/generator'
+import { shareSession } from '../recent'
 import { Figure } from '../figure/Figure'
 import { CAT_META, Move } from '../data/moves'
 import { fmtDur, stepLabel } from './format'
 import { MoveSheet } from '../ui/MoveSheet'
-import { FOCUS_MODE_ICON } from '../ui/icons'
 
 interface Props {
   session: Session
   prefs: Prefs
+  title: string
   onPrefs: (p: Prefs) => void
   onChange: (s: Session) => void
   onShuffle: () => void
@@ -44,11 +45,21 @@ function groupSteps(steps: Step[], ready: number) {
   return out
 }
 
-export function Preview({ session, prefs, onPrefs, onChange, onShuffle, onBack, onStart }: Props) {
+export function Preview({ session, prefs, title, onPrefs, onChange, onShuffle, onBack, onStart }: Props) {
   const [open, setOpen] = useState<{ move: Move; block: Block; swappable: boolean } | null>(null)
   const groups = groupSteps(session.steps, readyOf(session.settings))
   const moveCount = new Set(session.steps.map((s) => s.move.id)).size
-  const FocusIcon = FOCUS_MODE_ICON[session.settings.focus]
+  const [toast, setToast] = useState<string | null>(null)
+  useEffect(() => {
+    if (!toast) return
+    const id = setTimeout(() => setToast(null), 2200)
+    return () => clearTimeout(id)
+  }, [toast])
+  const share = async () => {
+    const r = await shareSession(encodeSession(session), `Flow: ${title}`)
+    if (r === 'copied') setToast('Link copied')
+    else if (r === 'failed') setToast('Could not share')
+  }
   const swap = (id: string, block: Block) => onChange(swapMove(session, id, block))
 
   return (
@@ -57,10 +68,15 @@ export function Preview({ session, prefs, onPrefs, onChange, onShuffle, onBack, 
         <button className="icon-btn" onClick={onBack} aria-label="Back">
           <ChevronLeft size={22} />
         </button>
-        <div className="topbar-title">Your session</div>
-        <button className="icon-btn" onClick={onShuffle} aria-label="Shuffle whole session">
-          <Shuffle size={19} />
-        </button>
+        <div className="topbar-title">{title}</div>
+        <div className="topbar-actions">
+          <button className="icon-btn" onClick={share} aria-label="Share session link">
+            <Share2 size={19} />
+          </button>
+          <button className="icon-btn" onClick={onShuffle} aria-label="Shuffle whole session">
+            <Shuffle size={19} />
+          </button>
+        </div>
       </header>
 
       <section className="stats">
@@ -75,7 +91,7 @@ export function Preview({ session, prefs, onPrefs, onChange, onShuffle, onBack, 
           <small>moves</small>
         </div>
         <div className="stat">
-          <FocusIcon size={17} />
+          <Gauge size={17} />
           <b>{FOCUS_LABEL[session.settings.focus]}</b>
           <small>{INTENSITY_LABEL[session.settings.intensity]}</small>
         </div>
@@ -143,9 +159,10 @@ export function Preview({ session, prefs, onPrefs, onChange, onShuffle, onBack, 
         <button className="cta" onClick={onStart}>
           <Play size={18} fill="currentColor" />
           Start session
-          <span className="cta-meta">{fmtDur(session.totalSecs)}</span>
         </button>
       </div>
+
+      {toast && <div className="toast" role="status">{toast}</div>}
 
       {open && (
         <MoveSheet

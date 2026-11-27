@@ -1,5 +1,7 @@
 import {
   AnchorName,
+  ContactName,
+  levelFor,
   bounds,
   ease,
   floorOf,
@@ -23,12 +25,21 @@ export interface Anim {
   mode: 'loop' | 'hold'
   /** Optional relative weights for each segment (loop: frames.length segments, hold: frames.length-1). */
   beats?: number[]
-  props?: 'dumbbells'
+  props?: 'dumbbells' | 'band'
+  /** Where a resistance band runs: between two points, or a loop around the thighs. */
+  band?: [BandPoint, BandPoint][] | 'thighs'
+  /**
+   * Body parts touching the floor in each keyframe (same order as frames).
+   * Two or more contacts rotate the whole body so they all rest on the floor.
+   */
+  contacts?: (ContactName[] | null | undefined)[]
   /** Loop whose last frame equals the first (e.g. +360°): no wrap-around segment. */
   closed?: boolean
   /** Pose the "breathing" idle subtly modulates while holding. */
   breathe?: boolean
 }
+
+export type BandPoint = 'lHand' | 'rHand' | 'lFoot' | 'rFoot' | 'lToe' | 'rToe' | 'lKnee' | 'rKnee' | 'anchor'
 
 export interface Compiled {
   anim: Anim
@@ -48,7 +59,12 @@ export function place(rig: Rig, anchor: AnchorName) {
 export function compile(anim: Anim): Compiled {
   const hit = cache.get(anim)
   if (hit) return hit
-  const poses = anim.frames.map(full)
+  const poses = anim.frames.map((f, i) => {
+    const p = full(f)
+    const c = anim.contacts?.[i]
+    if (c && c.length >= 2 && f.rot === undefined) p.rot = levelFor(p, anim.view, c)
+    return p
+  })
   let x0 = Infinity,
     x1 = -Infinity,
     y0 = Infinity,

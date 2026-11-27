@@ -1,33 +1,4 @@
-// Voice, chimes and screen wake lock. All optional and fail-soft.
-
-let voiceOn = true
-export const setVoice = (on: boolean) => {
-  voiceOn = on
-  if (!on) window.speechSynthesis?.cancel()
-}
-
-let preferred: SpeechSynthesisVoice | null = null
-function pickVoice() {
-  const vs = window.speechSynthesis?.getVoices() ?? []
-  preferred =
-    vs.find((v) => /en/i.test(v.lang) && /(samantha|google uk english female|serena|karen|natural)/i.test(v.name)) ??
-    vs.find((v) => /^en/i.test(v.lang)) ??
-    null
-}
-if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-  pickVoice()
-  window.speechSynthesis.onvoiceschanged = pickVoice
-}
-
-export function say(text: string, { interrupt = true } = {}) {
-  if (!voiceOn || !('speechSynthesis' in window)) return
-  if (interrupt) window.speechSynthesis.cancel()
-  const u = new SpeechSynthesisUtterance(text)
-  if (preferred) u.voice = preferred
-  u.rate = 0.98
-  u.pitch = 1
-  window.speechSynthesis.speak(u)
-}
+// Chimes and screen wake lock. All optional and fail-soft.
 
 let chimesOn = true
 export const setChimes = (on: boolean) => {
@@ -40,8 +11,6 @@ export function unlockAudio() {
   try {
     ctx ??= new AudioContext()
     if (ctx.state === 'suspended') void ctx.resume()
-    // iOS also needs an utterance from a gesture before speech works later.
-    if (voiceOn && 'speechSynthesis' in window) window.speechSynthesis.speak(new SpeechSynthesisUtterance(''))
   } catch {
     /* ignore */
   }

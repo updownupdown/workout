@@ -1,4 +1,5 @@
-import { Category, Move, MOVES, Position } from '../data/moves'
+import { Category, Move, MOVE_BY_ID, MOVES, Position } from '../data/moves'
+import { THEME_BY_ID } from './themes'
 
 export type FocusMode = 'balanced' | 'strength' | 'flow' | 'calm'
 export type Intensity = 'gentle' | 'steady' | 'strong'
@@ -9,9 +10,14 @@ export interface Settings {
   focus: FocusMode
   target: Target
   dumbbells: boolean
+  /** Has a pilates / resistance band. */
+  band: boolean
   intensity: Intensity
-  voice: boolean
+  /** Optional theme preset that boosts certain moves (see themes.ts). */
+  theme: string | null
   chimes: boolean
+  /** Experimental three.js figure in the player and move sheets. */
+  view3d: boolean
   /** Seconds to get into position before each step. */
   readySecs: number
 }
@@ -21,9 +27,11 @@ export const DEFAULT_SETTINGS: Settings = {
   focus: 'balanced',
   target: 'any',
   dumbbells: false,
+  band: false,
   intensity: 'steady',
-  voice: true,
+  theme: null,
   chimes: true,
+  view3d: false,
   readySecs: 7,
 }
 
@@ -159,7 +167,8 @@ const POSITION_ORDER: Position[] = ['standing', 'kneeling', 'quadruped', 'prone'
 const rank = (p: Position) => POSITION_ORDER.indexOf(p)
 
 const COOL_IDS = new Set([
-  'happy-baby', 'puppy', 'sphinx',
+  'happy-baby', 'puppy', 'sphinx', 'pigeon', 'figure-four', 'calf-stretch', 'chest-opener', 'standing-hamstring',
+  'straddle-side', 'band-hamstring', 'lizard',
   'forward-fold', 'cross-shoulder', 'triceps-stretch', 'quad-stretch', 'child', 'seated-fold',
   'butterfly', 'knees-chest', 'low-lunge', 'cobra',
 ])
@@ -190,7 +199,10 @@ function gravityOrder(moves: Move[], r: Rng): Move[] {
 
 function available(s: Settings, p: Prefs) {
   const hidden = new Set(p.hidden)
-  return MOVES.filter((m) => (m.equipment === 'dumbbells' ? s.dumbbells : true) && !hidden.has(m.id))
+  return MOVES.filter(
+    (m) =>
+      (m.equipment === 'dumbbells' ? s.dumbbells : m.equipment === 'band' ? s.band : true) && !hidden.has(m.id),
+  )
 }
 
 function fill(
@@ -203,6 +215,7 @@ function fill(
   used: Set<string>,
 ) {
   const fav = new Set(p.fav)
+  const theme = s.theme ? THEME_BY_ID[s.theme] : undefined
   const out: Move[] = []
   let left = budget
   for (let guard = 0; guard < 200 && left > 20; guard++) {
@@ -214,6 +227,8 @@ function fill(
       if (s.intensity === 'strong') w *= m.level >= 2 ? 1.4 : 0.8
       // Prefer dumbbell work when the user said they have them.
       if (s.dumbbells && m.equipment === 'dumbbells') w *= 1.6
+      if (s.band && m.equipment === 'band') w *= 1.6
+      if (theme) w *= theme.boost.includes(m.id) ? 5 : theme.work && m.work?.some((x) => theme.work!.includes(x)) ? 1.8 : 1
       if (fav.has(m.id)) w *= 2.5
       if (s.target !== 'any' && s.target) w *= m.focus.includes(s.target) ? 3 : 0.6
       return w
@@ -334,4 +349,67 @@ export function swapMove(session: Session, moveId: string, block: Block): Sessio
     steps.push(st)
   }
   return { ...session, steps, totalSecs: sessionSecs(steps, s) }
+}
+
+// ------------------------------------------------------------------ share codes
+
+/**
+ * A session as a short, URL-safe code: settings plus the ordered list of
+ * (block, round, move). Sides and timing are rebuilt on load, so links stay
+ * small and survive library tweaks.
+ */
+const BLOCK_CODE: Record<Block, string> = { open: 'o', warm: 'w', main: 'm', cool: 'c', close: 'x' }
+const CODE_BLOCK = Object.fromEntries(Object.entries(BLOCK_CODE).map(([k, v]) => [v, k])) as Record<string, Block>
+const FOCI: FocusMode[] = ['balanced', 'strength', 'flow', 'calm']
+const INTS: Intensity[] = ['gentle', 'steady', 'strong']
+const TARGETS: Target[] = ['any', 'upper', 'lower', 'core', 'spine']
+
+export function encodeSession(session: Session): string {
+  const s = session.settings
+  const head = [
+    s.minutes,
+    FOCI.indexOf(s.focus),
+    INTS.indexOf(s.intensity),
+    TARGETS.indexOf(s.target ?? 'any'),
+    (s.dumbbells ? 1 : 0) + (s.band ? 2 : 0),
+    s.theme ?? '',
+  ].join('.')
+  const seen = new Set<string>()
+  const items: string[] = []
+  for (const st of session.steps) {
+    const k = `${st.block}${st.round ?? ''}${st.move.id}`
+    if (seen.has(k)) continue
+    seen.add(k)
+    items.push(`${BLOCK_CODE[st.block]}${st.round ?? ''}${st.move.id}`)
+  }
+  return `${head}~${items.join('~')}`
+}
+
+export function decodeSession(code: string, base: Settings, prefs: Prefs): Session | null {
+  try {
+    const [head, ...items] = decodeURIComponent(code).split('~')
+    const [min, f, i, t, eq, theme] = head.split('.')
+    const settings: Settings = {
+      ...base,
+      minutes: Number(min) || base.minutes,
+      focus: FOCI[Number(f)] ?? base.focus,
+      intensity: INTS[Number(i)] ?? base.intensity,
+      target: TARGETS[Number(t)] ?? 'any',
+      dumbbells: (Number(eq) & 1) === 1,
+      band: (Number(eq) & 2) === 2,
+      theme: theme || null,
+    }
+    const steps: Step[] = []
+    for (const it of items) {
+      const m = /^([owmcx])(\d*)(.+)$/.exec(it)
+      if (!m) continue
+      const move = MOVE_BY_ID[m[3]]
+      if (!move) continue
+      steps.push(...toSteps([move], CODE_BLOCK[m[1]], settings, m[2] ? Number(m[2]) : undefined))
+    }
+    if (!steps.length) return null
+    return { seed: 0, settings, prefs, steps, totalSecs: sessionSecs(steps, settings) }
+  } catch {
+    return null
+  }
 }

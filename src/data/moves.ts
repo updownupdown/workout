@@ -1,9 +1,9 @@
 import type { Anim } from '../figure/anim'
-import type { PoseInput } from '../figure/skeleton'
 
 export type Category = 'warmup' | 'strength' | 'core' | 'pilates' | 'yoga' | 'stretch' | 'breath' | 'rest'
 export type Position = 'standing' | 'kneeling' | 'quadruped' | 'prone' | 'supine' | 'seated'
 export type Focus = 'upper' | 'lower' | 'core' | 'spine' | 'full' | 'mind'
+export type Muscle = 'arms' | 'shoulders' | 'chest' | 'back' | 'core' | 'glutes' | 'legs' | 'calves'
 
 export interface BreathPhase {
   kind: 'in' | 'hold' | 'out'
@@ -23,7 +23,9 @@ export interface Move {
   /** Seconds per rep (loop anim) or seconds to flow into the pose (hold anim). */
   tempo: number
   sided?: boolean
-  equipment?: 'dumbbells'
+  equipment?: 'dumbbells' | 'band'
+  /** Muscles to highlight on the figure (defaults from focus). */
+  work?: Muscle[]
   level: 1 | 2 | 3
   cues: string[]
   anim: Anim
@@ -31,51 +33,13 @@ export interface Move {
   cycles?: number
 }
 
-// ---------------------------------------------------------------------------
-// Reusable base poses (see figure/skeleton.ts for angle conventions)
-// ---------------------------------------------------------------------------
-
-const QUAD: PoseInput = {
-  torso: 78, head: -10,
-  lSh: 78, rSh: 78, lWr: 90, rWr: 90,
-  lHip: 78, rHip: 78, lKnee: 90, rKnee: 90, lAnk: 90, rAnk: 90,
-}
-const PLANK: PoseInput = { torso: 69, lSh: 69, rSh: 69, lWr: 90, rWr: 90, lAnk: 5, rAnk: 5 }
-const PUSH_DOWN: PoseInput = { torso: 80, lSh: 0, rSh: 0, lEl: 80, rEl: 80, lWr: 90, rWr: 90, lAnk: 5, rAnk: 5 }
-const SUPINE: PoseInput = { torso: -90 }
-const HOOK: PoseInput = { torso: -90, lHip: 45, rHip: 45, lKnee: 125, rKnee: 125, lAnk: 10, rAnk: 10 }
-const PRONE: PoseInput = { torso: 90, lSh: 180, rSh: 180, lAnk: 90, rAnk: 90, head: -10 }
-const PILATES_CURL = { spine: 30, head: 15 }
-const SEATED_FRONT: PoseInput = {
-  lHip: 80, rHip: 80, lKnee: 150, rKnee: 150,
-  lSh: 22, rSh: 22, lEl: 45, rEl: 45,
-}
-const SEATED_SIDE: PoseInput = { lHip: 90, rHip: 90, lAnk: -10, rAnk: -10, lSh: 20, rSh: 20 }
-const KNEEL: PoseInput = { lKnee: 90, rKnee: 90, lAnk: 90, rAnk: 90 }
-
-const sym = (sh: number, el = 0): PoseInput => ({ lSh: sh, rSh: sh, lEl: el, rEl: el })
-const legs = (hip: number, knee = 0, ank = 0): PoseInput => ({
-  lHip: hip, rHip: hip, lKnee: knee, rKnee: knee, lAnk: ank, rAnk: ank,
-})
-
-const hold = (view: Anim['view'], anchor: Anim['anchor'], ...frames: PoseInput[]): Anim => ({
-  view, anchor, frames, mode: 'hold',
-})
-const loop = (view: Anim['view'], anchor: Anim['anchor'], ...frames: PoseInput[]): Anim => ({
-  view, anchor, frames, mode: 'loop',
-})
-
-const BREATH_FIG: Anim = {
-  view: 'front',
-  anchor: 'pelvis',
-  mode: 'loop',
-  breathe: false,
-  frames: [SEATED_FRONT, { ...SEATED_FRONT, lSh: 27, rSh: 27, lEl: 48, rEl: 48, head: -3 }],
-}
+import { BREATH_FIG, HOOK, KNEEL, legs, PILATES_CURL, PLANK, PRONE, PUSH_DOWN, QUAD, SEATED_SIDE, SUPINE, hold, loop, sym } from './poses'
+import { MORE } from './moves-more'
+import { applyFloor } from './contacts'
 
 // ---------------------------------------------------------------------------
 
-export const MOVES: Move[] = [
+const BASE: Move[] = [
   // ----------------------------------------------------------------- breath
   {
     id: 'box-breath', name: 'Box breathing', cat: 'breath', position: 'seated', focus: ['mind'],
@@ -363,8 +327,8 @@ export const MOVES: Move[] = [
     kind: 'time', secs: 20, tempo: 3, level: 1,
     cues: ['Hands under shoulders', 'Lift the chest, not the shoulders', 'Hips stay down'],
     anim: hold('side', 'pelvis',
-      { torso: 90, ...sym(20, 70), lWr: 90, rWr: 90, lAnk: 90, rAnk: 90 },
-      { torso: 90, spine: -40, head: -15, ...sym(30, 20), lWr: 90, rWr: 90, lAnk: 90, rAnk: 90 }),
+      { torso: 90, ...sym(-30, 120), lWr: 90, rWr: 90, lAnk: 90, rAnk: 90 },
+      { torso: 90, spine: -55, head: -15, ...sym(-14, 112), lWr: 20, rWr: 20, lAnk: 90, rAnk: 90 }),
   },
   {
     id: 'warrior-2', name: 'Warrior II', cat: 'yoga', position: 'standing', focus: ['lower', 'full'],
@@ -464,7 +428,7 @@ export const MOVES: Move[] = [
     id: 'butterfly', name: 'Butterfly', cat: 'stretch', position: 'seated', focus: ['lower'],
     kind: 'time', secs: 40, tempo: 3, level: 1,
     cues: ['Soles of the feet together', 'Let the knees fall open', 'Sit tall, then fold if you like'],
-    anim: hold('front', 'pelvis', { ...legs(40, 30), ...sym(15, 10) }, { ...legs(72, 150), ...sym(22, 30) }),
+    anim: hold('front', 'pelvis', { ...legs(82, 170, 90), ...sym(22, 30) }, { ...legs(100, 166, 90), ...sym(22, 30) }),
   },
 
 
@@ -518,7 +482,7 @@ export const MOVES: Move[] = [
     kind: 'reps', reps: 10, tempo: 3, level: 2,
     cues: ['Hands behind you, fingers forward', 'Lift the hips level with the knees', 'Gaze up, neck long'],
     anim: loop('side', 'rFoot',
-      { torso: -25, ...sym(-30), ...legs(70, 100, 0) },
+      { torso: -40, ...sym(-20, 30), ...legs(70, 100, 0) },
       { torso: -90, head: -10, ...sym(-90), ...legs(0, 90, 0) }),
   },
 
@@ -538,14 +502,6 @@ export const MOVES: Move[] = [
     anim: loop('side', 'pelvis',
       { ...PRONE, spine: -12, rSh: 190, lSh: 165, lHip: -14, rHip: -4 },
       { ...PRONE, spine: -12, lSh: 190, rSh: 165, rHip: -14, lHip: -4 }),
-  },
-  {
-    id: 'teaser', name: 'Teaser', cat: 'pilates', position: 'supine', focus: ['core'],
-    kind: 'reps', reps: 5, tempo: 6, level: 3,
-    cues: ['Roll up into a V', 'Arms reach parallel to the legs', 'Roll down one vertebra at a time'],
-    anim: loop('side', 'pelvis',
-      { ...SUPINE, ...sym(180), lAnk: 30, rAnk: 30 },
-      { torso: -40, spine: 10, head: 5, ...sym(100), ...legs(95, 0, 30) }),
   },
   {
     id: 'toe-taps', name: 'Toe taps', cat: 'pilates', position: 'supine', focus: ['core'],
@@ -589,6 +545,9 @@ export const MOVES: Move[] = [
     anim: hold('side', 'pelvis', HOOK, { ...SUPINE, ...sym(18), ...legs(0, 0, 10) }),
   },
 ]
+
+export const RAW_MOVES: Move[] = [...BASE, ...MORE]
+export const MOVES: Move[] = applyFloor(RAW_MOVES)
 
 export const MOVE_BY_ID: Record<string, Move> = Object.fromEntries(MOVES.map((m) => [m.id, m]))
 

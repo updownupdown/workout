@@ -4,17 +4,17 @@ A phone-first, installable PWA that builds a random follow-along session (yoga, 
 
 ## 1. Product shape
 
-**Core loop:** pick time + focus, tap **Build**, glance at the list (swap anything you dislike), tap **Start**, follow the figure and the voice.
+**Core loop:** pick a theme (optional), time, focus, target, intensity and equipment as wrapping pills, tap **Build my session**, glance at the list (swap anything you dislike), tap **Start session**, follow the figure. Chimes count you in; there is no voice.
 
 | Screen | Purpose |
 | --- | --- |
-| Home | Time (10/20/30/45), focus (Balanced, Strength, Flow, Calm), intensity (Gentle/Steady/Strong), dumbbells toggle, voice toggle, quick starts. An animated figure rotates through moves so the app feels alive. |
+| Home | One consistent pill control for theme (Hip opener, Back care, Post-run, Wake-up, Desk reset, Core burner, Full strength, Band workout, Wind down), duration (10–45), focus, target, intensity and equipment (dumbbells, elastic band). Recent sessions below. |
 | Preview | Session as a timeline grouped into Arrive → Warm up → Main set → Cool down → Rest. Per-row swap, whole-session shuffle, one big Start button. |
 | Player | Full-screen stage with the animated figure, move name, rotating form cue, rep counter or countdown ring, pause/skip/back, "Then: …" peek, story-style progress bar for the whole session. Landscape/desktop switches to a two-column layout. |
 | Done | Short wrap-up (time, moves, categories). Repeat or build a new one. |
 | Library | Every move with an animated preview and cues. |
 
-**Hands-free by design:** each step starts with a 7-second "get ready" window where the figure demonstrates how to enter the pose (with a faint ghost of the target pose), the voice announces it, and three ticks count you in. Holds announce "halfway"; reps announce "last one". Screen stays awake (Wake Lock). Tapping the stage pauses; the session pauses automatically if you leave the app. Space / ← / → / Esc work on desktop.
+**Hands-free by design:** each step starts with a 7-second "get ready" window where the figure demonstrates how to enter the pose (with a faint ghost of the target pose), and three ticks count you in. Screen stays awake (Wake Lock). Tapping the stage pauses; the session pauses automatically if you leave the app. Space / ← / → / Esc work on desktop.
 
 ## 2. The session generator
 
@@ -54,16 +54,16 @@ Because the angles are anatomical (hip flexion, shoulder flexion…), the **same
 ### Creative extras on the roadmap
 
 - **Breath orb**: already in. A glowing orb expands and contracts with the breath pattern (box, 4-7-8, coherent, physiological sigh) while the seated figure's shoulders rise and fall.
-- **Muscle glow**: tint the working limbs per move (e.g. glutes on bridges).
+- **Muscle glow** (done): working muscles glow and pulse in the category colour.
 - **Camera turns**: for moves that read better from another angle, cross-fade between side and front view mid-hold.
 - **Tempo cues on the body**: a small pulse on the moving joint at the top of each rep.
-- **3D upgrade** (v2): orbitable mannequin driven by the same data, lazy-loaded only on capable devices.
+- **3D view** (experimental, done): orbitable capsule mannequin driven by the same data, lazy-loaded behind a settings toggle.
 - **Pose authoring tool**: a dev page with sliders per joint that exports keyframes (the `?poses` contact sheet already exists for checking).
 
 ## 4. Tech
 
 - Vite + React + TypeScript, `vite-plugin-pwa` (auto-updating service worker, full offline precache, installable manifest, maskable icons).
-- Web Speech API for voice, Web Audio for chimes, Wake Lock API to keep the screen on. All fail-soft.
+- Web Audio for chimes, Wake Lock API to keep the screen on. All fail-soft.
 - Settings in `localStorage`. No backend.
 - GitHub Actions builds on every push to `main` and deploys to GitHub Pages.
 
@@ -72,9 +72,11 @@ Because the angles are anatomical (hip flexion, shoulder flexion…), the **same
 - `src/figure/skeleton.ts`: pose model, forward kinematics, grounding.
 - `src/figure/anim.ts`: keyframes, tempo, auto-framing.
 - `src/figure/Figure.tsx`: SVG renderer.
-- `src/data/moves.ts`: the move library (67 moves) with cues, timing and keyframes.
+- `src/data/moves.ts`: the base move library; `moves-more.ts` adds the rest (140 moves in total); `contacts.ts` declares floor contacts per keyframe, baked by `scripts/settle-poses.ts` into `settled.ts` and checked by `scripts/check-poses.ts` with cues, timing and keyframes.
 - `src/engine/generator.ts`: recipes, budget fill, gravity ordering, swaps.
-- `src/engine/cues.ts`: voice, chimes, wake lock.
+- `src/engine/cues.ts`: chimes, wake lock.
+- `src/engine/themes.ts`: theme presets. Share links encode the plan in `#s=…` (`encodeSession`/`decodeSession`).
+- `src/figure/Figure3D.tsx`: experimental three.js renderer (lazy-loaded, toggle in settings) driven by the same rig.
 - `src/screens/*`: Home, Preview, Player, Done, Library, PoseSheet (dev).
 
 ## 5. Next steps

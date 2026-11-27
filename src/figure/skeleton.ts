@@ -26,6 +26,8 @@
 export type View = 'side' | 'front'
 
 export interface Pose {
+  /** Whole-body rotation about the pelvis, filled in from floor contacts at compile time. */
+  rot: number
   torso: number
   spine: number
   head: number
@@ -46,6 +48,7 @@ export interface Pose {
 export type PoseInput = Partial<Pose>
 
 export const NEUTRAL: Pose = {
+  rot: 0,
   torso: 0,
   spine: 0,
   head: 0,
@@ -166,7 +169,7 @@ function chain(
 }
 
 export function solve(pose: Pose, view: View): Rig {
-  const T = pose.torso
+  const T = pose.torso + pose.rot
   const Tu = T + pose.spine
   const pelvis = { x: 0, y: 0 }
   const mid = add(pelvis, dir(T), L.lowBack)
@@ -269,6 +272,8 @@ export type AnchorName =
   | 'rHand'
   | 'lKnee'
   | 'rKnee'
+  | 'lToe'
+  | 'rToe'
 
 export function anchorPoint(rig: Rig, a: AnchorName): Pt {
   switch (a) {
@@ -290,6 +295,10 @@ export function anchorPoint(rig: Rig, a: AnchorName): Pt {
       return rig.l.thigh.b
     case 'rKnee':
       return rig.r.thigh.b
+    case 'lToe':
+      return rig.l.foot.b
+    case 'rToe':
+      return rig.r.foot.b
   }
 }
 
@@ -313,4 +322,68 @@ export function shift(rig: Rig, dx: number, dy: number) {
     }
   }
   for (const c of rig.contacts) mv(c.p)
+}
+
+/** Body parts that can be declared as touching the floor in a keyframe. */
+export type ContactName =
+  | 'head' | 'back' | 'mid' | 'pelvis'
+  | 'lElbow' | 'rElbow' | 'lHand' | 'rHand'
+  | 'lKnee' | 'rKnee' | 'lHeel' | 'rHeel' | 'lToe' | 'rToe'
+
+export function contactOf(rig: Rig, c: ContactName): { p: Pt; r: number } {
+  switch (c) {
+    case 'head': return { p: rig.head, r: L.headR }
+    case 'back': return { p: rig.neck, r: W.torso / 2 }
+    case 'mid': return { p: rig.mid, r: W.torso / 2 }
+    case 'pelvis': return { p: rig.pelvis, r: W.torso / 2 }
+    case 'lElbow': return { p: rig.l.upper.b, r: W.upperArm / 2 }
+    case 'rElbow': return { p: rig.r.upper.b, r: W.upperArm / 2 }
+    case 'lHand': return { p: rig.l.hand.b, r: 3.5 }
+    case 'rHand': return { p: rig.r.hand.b, r: 3.5 }
+    case 'lKnee': return { p: rig.l.thigh.b, r: W.thigh / 2 }
+    case 'rKnee': return { p: rig.r.thigh.b, r: W.thigh / 2 }
+    case 'lHeel': return { p: rig.l.shin.b, r: W.shin / 2 }
+    case 'rHeel': return { p: rig.r.shin.b, r: W.shin / 2 }
+    case 'lToe': return { p: rig.l.foot.b, r: W.foot / 2 }
+    case 'rToe': return { p: rig.r.foot.b, r: W.foot / 2 }
+  }
+}
+
+/**
+ * Find the whole-body rotation that puts the two outermost declared contacts
+ * level with each other and lowest on the body, so both rest on the floor.
+ */
+export function levelFor(pose: Pose, view: View, contacts: ContactName[]): number {
+  if (contacts.length < 2) return 0
+  const rig0 = solve({ ...pose, rot: 0 }, view)
+  const pts = contacts.map((c) => contactOf(rig0, c))
+  // the two contacts farthest apart define the floor line
+  let a = 0, b = 1, best = -1
+  for (let i = 0; i < pts.length; i++)
+    for (let j = i + 1; j < pts.length; j++) {
+      const d = Math.hypot(pts[i].p.x - pts[j].p.x, pts[i].p.y - pts[j].p.y)
+      if (d > best) { best = d; a = i; b = j }
+    }
+  const p1 = pts[a], p2 = pts[b]
+  const vx = p2.p.x - p1.p.x, vy = p2.p.y - p1.p.y
+  const len = Math.hypot(vx, vy)
+  if (len < 1) return 0
+  const phi = Math.atan2(vy, vx)
+  const s = Math.max(-1, Math.min(1, (p1.r - p2.r) / len))
+  const cands = [Math.asin(s) - phi, Math.PI - Math.asin(s) - phi].map((th) => {
+    let d = (th * 180) / Math.PI
+    while (d > 180) d -= 360
+    while (d < -180) d += 360
+    return d
+  })
+  let pick = cands[0], score = Infinity
+  for (const d of cands) {
+    const rig = solve({ ...pose, rot: d }, view)
+    const ground = floorOf(rig)
+    const cy = Math.max(...contacts.map((c) => { const k = contactOf(rig, c); return k.p.y + k.r }))
+    // prefer contacts that end up lowest, then the smaller rotation
+    const sc = (ground - cy) * 10 + Math.abs(d) * 0.01
+    if (sc < score) { score = sc; pick = d }
+  }
+  return pick
 }

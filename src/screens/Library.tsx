@@ -3,11 +3,11 @@ import { ChevronLeft, EyeOff, Heart, Search, X } from 'lucide-react'
 import { Category, CAT_META, Move, MOVES } from '../data/moves'
 import { Figure } from '../figure/Figure'
 import { Prefs } from '../engine/generator'
-import { CAT_ICON } from '../ui/icons'
+import { Pills } from '../ui/Pills'
 import { MoveSheet } from '../ui/MoveSheet'
 
 const ORDER: Category[] = ['breath', 'warmup', 'strength', 'core', 'pilates', 'yoga', 'stretch', 'rest']
-type Filter = Category | 'all' | 'fav'
+type Filter = Category | 'all' | 'fav' | 'dumbbells' | 'band'
 
 export function Library({ prefs, onPrefs, onBack }: { prefs: Prefs; onPrefs: (p: Prefs) => void; onBack: () => void }) {
   const [open, setOpen] = useState<Move | null>(null)
@@ -16,7 +16,12 @@ export function Library({ prefs, onPrefs, onBack }: { prefs: Prefs; onPrefs: (p:
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase()
     return MOVES.filter((m) =>
-      (filter === 'all' || (filter === 'fav' ? prefs.fav.includes(m.id) : m.cat === filter)) &&
+      (filter === 'all' ||
+        (filter === 'fav'
+          ? prefs.fav.includes(m.id)
+          : filter === 'dumbbells' || filter === 'band'
+            ? m.equipment === filter
+            : m.cat === filter)) &&
       (!needle || m.name.toLowerCase().includes(needle) || CAT_META[m.cat].label.toLowerCase().includes(needle)),
     )
   }, [filter, q, prefs.fav])
@@ -41,25 +46,18 @@ export function Library({ prefs, onPrefs, onBack }: { prefs: Prefs; onPrefs: (p:
         )}
       </label>
 
-      <div className="chips-scroll">
-        <button className={`select-chip ${filter === 'all' ? 'on' : ''}`} onClick={() => setFilter('all')}>All</button>
-        <button className={`select-chip ${filter === 'fav' ? 'on' : ''}`} onClick={() => setFilter('fav')}>
-          <Heart size={14} /> Favourites
-        </button>
-        {ORDER.map((c) => {
-          const Icon = CAT_ICON[c]
-          return (
-            <button
-              key={c}
-              className={`select-chip ${filter === c ? 'on' : ''}`}
-              style={{ ['--c' as string]: CAT_META[c].color }}
-              onClick={() => setFilter(c)}
-            >
-              <Icon size={14} /> {CAT_META[c].label}
-            </button>
-          )
-        })}
-      </div>
+      <Pills
+        label="Filter moves"
+        options={[
+          { id: 'all' as Filter, label: `All ${MOVES.length}` },
+          { id: 'fav' as Filter, label: 'Favourites', icon: Heart },
+          ...ORDER.map((c) => ({ id: c as Filter, label: CAT_META[c].label, dot: CAT_META[c].color })),
+          { id: 'dumbbells' as Filter, label: 'Dumbbells' },
+          { id: 'band' as Filter, label: 'Elastic band' },
+        ]}
+        isOn={(f) => filter === f}
+        onPick={setFilter}
+      />
 
       {list.length === 0 ? (
         <p className="empty">{filter === 'fav' ? 'No favourites yet. Open a move and tap the heart.' : 'No moves match.'}</p>
@@ -84,7 +82,7 @@ export function Library({ prefs, onPrefs, onBack }: { prefs: Prefs; onPrefs: (p:
                 <strong>{m.name}</strong>
                 <small>
                   <span className="dot" /> {CAT_META[m.cat].label}
-                  {m.equipment ? ' · weights' : ''}
+                  {m.equipment === 'dumbbells' ? ' · dumbbells' : m.equipment === 'band' ? ' · band' : ''}
                 </small>
               </button>
             )

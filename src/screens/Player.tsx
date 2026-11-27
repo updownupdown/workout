@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useReducer, useRef } from 'react'
 import { Pause, Play, SkipBack, SkipForward, Volume2, VolumeX, X, ArrowLeftRight, Repeat } from 'lucide-react'
-import { breathCycleSecs, readyOf, Session, Step } from '../engine/generator'
+import { breathCycleSecs, readyOf, Session } from '../engine/generator'
 import { CAT_ICON } from '../ui/icons'
 import { Figure } from '../figure/Figure'
 import { BreathPhase, CAT_META } from '../data/moves'
-import { chime, keepAwake, say, unlockAudio } from '../engine/cues'
+import { chime, keepAwake, unlockAudio } from '../engine/cues'
+import { workOf } from '../data/muscles'
+
+const Figure3D = lazy(() => import('../figure/Figure3D'))
 import { fmtClock, stepLabel } from './format'
 
 interface Props {
   session: Session
-  voice: boolean
-  onVoice: (v: boolean) => void
+  sound: boolean
+  onSound: (v: boolean) => void
+  view3d: boolean
   onExit: () => void
   onDone: () => void
 }
@@ -49,16 +53,7 @@ export function breathAt(pattern: BreathPhase[], t: number) {
 
 const PHASE_WORD = { in: 'Breathe in', hold: 'Hold', out: 'Breathe out' }
 
-function announce(st: Step, first: boolean, prev?: Step) {
-  const name = st.move.name
-  if (prev && prev.move.id === st.move.id && st.side === 'left') return 'Switch sides.'
-  const side = st.side ? `, ${st.side} side` : ''
-  const amount =
-    st.move.kind === 'reps' ? `${st.reps} reps` : st.move.kind === 'breath' ? '' : `${st.secs} seconds`
-  return `${first ? "Let's begin. " : 'Next, '}${name}${side}. ${amount}`.trim()
-}
-
-export function Player({ session, voice, onVoice, onExit, onDone }: Props) {
+export function Player({ session, sound, onSound, view3d, onExit, onDone }: Props) {
   const steps = session.steps
   const TRANSITION = readyOf(session.settings)
   const clock = useRef<Clock>({ i: 0, phase: 'ready', t: 0, paused: false, fired: new Set() })
@@ -76,7 +71,6 @@ export function Player({ session, voice, onVoice, onExit, onDone }: Props) {
       const c = clock.current
       if (i >= steps.length) {
         chime('done')
-        say('Session complete. Nice work.')
         onDone()
         return
       }
@@ -102,28 +96,17 @@ export function Player({ session, voice, onVoice, onExit, onDone }: Props) {
         const st = steps[c.i]
         const m = st.move
         if (c.phase === 'ready') {
-          once(`ann`, () => say(announce(st, c.i === 0, steps[c.i - 1])))
           for (const n of [3, 2, 1]) if (c.t >= TRANSITION - n) once(`rt${n}`, () => chime('tick'))
           if (c.t >= TRANSITION) {
             c.phase = 'work'
             c.t = 0
             chime('go')
-            if (m.kind === 'time') say(m.cues[0])
-            if (m.kind === 'reps') say('Go')
           }
         } else {
           if (m.kind === 'breath' && m.pattern) {
             const b = breathAt(m.pattern, c.t)
-            once(`b${b.cycle}-${b.index}`, () => {
-              if (b.cycle === 0 || b.phase.kind !== 'hold') say(b.cycle < 2 ? PHASE_WORD[b.phase.kind] : b.phase.kind === 'in' ? 'In' : 'Out')
-              else chime('soft')
-            })
+            once(`b${b.cycle}-${b.index}`, () => chime('soft'))
           }
-          if (m.kind === 'reps' && st.reps) {
-            const rep = Math.floor(c.t / m.tempo) + 1
-            if (rep === st.reps && st.reps > 3) once('last', () => say('Last one'))
-          }
-          if (m.kind === 'time' && st.secs >= 30 && c.t >= st.secs / 2) once('half', () => say('Halfway'))
           if (m.kind !== 'reps') {
             for (const n of [3, 2, 1]) if (c.t >= st.secs - n) once(`wt${n}`, () => chime('tick'))
           }
@@ -164,7 +147,6 @@ export function Player({ session, voice, onVoice, onExit, onDone }: Props) {
     window.addEventListener('keydown', onKey)
     return () => {
       void keepAwake(false)
-      window.speechSynthesis?.cancel()
       document.removeEventListener('visibilitychange', onVis)
       window.removeEventListener('keydown', onKey)
     }
@@ -174,7 +156,6 @@ export function Player({ session, voice, onVoice, onExit, onDone }: Props) {
   const togglePause = () => {
     unlockAudio()
     clock.current.paused = !clock.current.paused
-    if (clock.current.paused) window.speechSynthesis?.cancel()
     render()
   }
   const back = () => {
@@ -237,8 +218,8 @@ export function Player({ session, voice, onVoice, onExit, onDone }: Props) {
           ))}
         </div>
         <span className="remaining">{fmtClock(remaining)}</span>
-        <button className="icon-btn ghost" onClick={() => onVoice(!voice)} aria-label={voice ? 'Mute voice' : 'Unmute voice'}>
-          {voice ? <Volume2 size={20} /> : <VolumeX size={20} />}
+        <button className="icon-btn ghost" onClick={() => onSound(!sound)} aria-label={sound ? 'Mute chimes' : 'Unmute chimes'}>
+          {sound ? <Volume2 size={20} /> : <VolumeX size={20} />}
         </button>
       </header>
 
@@ -249,16 +230,31 @@ export function Player({ session, voice, onVoice, onExit, onDone }: Props) {
             style={{ transform: `translate(-50%, -50%) scale(${0.55 + (breath?.level ?? 0) * 0.45})` }}
           />
         )}
-        <Figure
-          anim={m.anim}
-          t={figT}
-          tempo={m.kind === 'breath' ? 2 : m.tempo}
-          flip={st.side === 'left'}
-          accent={meta.color}
-          ghost={c.phase === 'ready'}
-          className="stage-fig"
-          title={m.name}
-        />
+        {view3d ? (
+          <Suspense fallback={null}>
+            <Figure3D
+              anim={m.anim}
+              t={figT}
+              tempo={m.kind === 'breath' ? 2 : m.tempo}
+              flip={st.side === 'left'}
+              accent={meta.color}
+              work={workOf(m)}
+              className="stage-fig stage-3d"
+            />
+          </Suspense>
+        ) : (
+          <Figure
+            anim={m.anim}
+            t={figT}
+            tempo={m.kind === 'breath' ? 2 : m.tempo}
+            flip={st.side === 'left'}
+            accent={meta.color}
+            ghost={c.phase === 'ready'}
+            work={workOf(m)}
+            className="stage-fig pulse"
+            title={m.name}
+          />
+        )}
         {c.phase === 'ready' && (
           <div className="ready">
             <span>Get ready</span>

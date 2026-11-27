@@ -3,7 +3,8 @@ import { CAT_META, Move } from '../data/moves'
 import { LiveFigure } from '../figure/Figure'
 import { Prefs } from '../engine/generator'
 import { toggleIn } from '../store'
-import { CAT_ICON, FOCUS_LABEL } from './icons'
+import { CAT_ICON } from './icons'
+import { MUSCLE_LABEL, workOf } from '../data/muscles'
 import { Sheet } from './Sheet'
 
 const POSITION_LABEL = {
@@ -38,7 +39,7 @@ export function MoveSheet({ move, prefs, onPrefs, onClose, onSwap }: Props) {
     <Sheet onClose={onClose}>
       <div className="move-sheet" style={{ ['--c' as string]: meta.color }}>
         <div className="move-stage">
-          <LiveFigure anim={move.anim} tempo={move.kind === 'breath' ? 4 : move.tempo} accent={meta.color} ghost />
+          <LiveFigure anim={move.anim} tempo={move.kind === 'breath' ? 4 : move.tempo} accent={meta.color} ghost work={workOf(move)} className="pulse" />
         </div>
         <div className="move-title">
           <span className="chip">
@@ -46,13 +47,13 @@ export function MoveSheet({ move, prefs, onPrefs, onClose, onSwap }: Props) {
           </span>
           <h2>{move.name}</h2>
           <p className="muted">
-            {[amount(move), move.sided ? 'each side' : null, POSITION_LABEL[move.position], move.equipment ? 'dumbbells' : null]
+            {[amount(move), move.sided ? 'each side' : null, POSITION_LABEL[move.position], move.equipment === 'dumbbells' ? 'Dumbbells' : move.equipment === 'band' ? 'Elastic band' : null]
               .filter(Boolean)
               .join(' · ')}
           </p>
           <div className="tag-row">
-            {move.focus.map((f) => (
-              <span key={f} className="tag">{FOCUS_LABEL[f]}</span>
+            {workOf(move).map((w) => (
+              <span key={w} className="tag">{MUSCLE_LABEL[w]}</span>
             ))}
           </div>
         </div>

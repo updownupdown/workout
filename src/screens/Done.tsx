@@ -1,5 +1,7 @@
-import { Clock, Home as HomeIcon, Layers, RotateCcw, Sparkles } from 'lucide-react'
-import { Session } from '../engine/generator'
+import { useState } from 'react'
+import { Clock, Home as HomeIcon, Layers, RotateCcw, Share2, Sparkles } from 'lucide-react'
+import { encodeSession, Session } from '../engine/generator'
+import { shareSession } from '../recent'
 import { LiveFigure } from '../figure/Figure'
 import { CAT_META, MOVE_BY_ID } from '../data/moves'
 import { CAT_ICON } from '../ui/icons'
@@ -7,12 +9,14 @@ import { fmtDur } from './format'
 
 interface Props {
   session: Session
+  title: string
   onAgain: () => void
   onNew: () => void
   onHome: () => void
 }
 
-export function Done({ session, onAgain, onNew, onHome }: Props) {
+export function Done({ session, title, onAgain, onNew, onHome }: Props) {
+  const [note, setNote] = useState<string | null>(null)
   const ids = [...new Set(session.steps.map((s) => s.move.id))]
   const cats = [...new Set(session.steps.map((s) => s.move.cat))]
   const rest = MOVE_BY_ID['savasana']
@@ -55,6 +59,15 @@ export function Done({ session, onAgain, onNew, onHome }: Props) {
         <div className="btn-pair">
           <button className="ghost-btn" onClick={onAgain}>
             <RotateCcw size={17} /> Repeat
+          </button>
+          <button
+            className="ghost-btn"
+            onClick={async () => {
+              const r = await shareSession(encodeSession(session), `Flow: ${title}`)
+              setNote(r === 'copied' ? 'Link copied' : r === 'failed' ? 'Could not share' : null)
+            }}
+          >
+            <Share2 size={17} /> {note ?? 'Share'}
           </button>
           <button className="ghost-btn" onClick={onHome}>
             <HomeIcon size={17} /> Home

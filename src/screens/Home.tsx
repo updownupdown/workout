@@ -1,83 +1,67 @@
 import { useEffect, useState } from 'react'
-import {
-  Bell, Clock, Download, Dumbbell, EyeOff, Gauge, Heart, LayoutGrid, Mic, Settings2, Sparkles, Sunrise, Coffee,
-  Flame, Hourglass, ChevronRight,
-} from 'lucide-react'
+import { Bell, Box, ChevronRight, Download, EyeOff, Heart, Hourglass, LayoutGrid, RotateCcw, Settings2, Sparkles } from 'lucide-react'
 import { FocusMode, Intensity, Prefs, Settings, Target } from '../engine/generator'
-import { LiveFigure } from '../figure/Figure'
-import { CAT_META, MOVE_BY_ID } from '../data/moves'
-import { CAT_ICON, FOCUS_MODE_ICON, TARGET_ICON } from '../ui/icons'
+import { THEMES, THEME_BY_ID } from '../engine/themes'
 import { Sheet } from '../ui/Sheet'
 import { Logo } from '../ui/Logo'
+import { Field, Pills } from '../ui/Pills'
+import { ago, Recent } from '../recent'
+import { fmtDur } from './format'
 
 interface Props {
   settings: Settings
   prefs: Prefs
+  recents: Recent[]
   onSettings: (s: Settings) => void
   onPrefs: (p: Prefs) => void
-  onBuild: (s?: Settings) => void
+  onBuild: () => void
+  onOpenRecent: (code: string) => void
+  onClearRecents: () => void
   onLibrary: () => void
 }
 
-const FOCI: { id: FocusMode; label: string; hint: string; color: string }[] = [
-  { id: 'balanced', label: 'Balanced', hint: 'A bit of everything', color: '#ff9a6b' },
-  { id: 'strength', label: 'Strength', hint: 'Two rounds, more sweat', color: '#ff7a59' },
-  { id: 'flow', label: 'Flow', hint: 'Yoga and pilates', color: '#b69cff' },
-  { id: 'calm', label: 'Calm', hint: 'Stretch and breathe', color: '#5fd8c0' },
-]
-const MINUTES = [10, 20, 30, 45]
-const INTENSITIES: { id: Intensity; label: string; bars: number }[] = [
-  { id: 'gentle', label: 'Gentle', bars: 1 },
-  { id: 'steady', label: 'Steady', bars: 2 },
-  { id: 'strong', label: 'Strong', bars: 3 },
+const MINUTES = [10, 15, 20, 30, 45]
+const FOCI: { id: FocusMode; label: string }[] = [
+  { id: 'balanced', label: 'Balanced' },
+  { id: 'strength', label: 'Strength' },
+  { id: 'flow', label: 'Flow' },
+  { id: 'calm', label: 'Calm' },
 ]
 const TARGETS: { id: Target; label: string }[] = [
   { id: 'any', label: 'Whole body' },
-  { id: 'upper', label: 'Upper' },
-  { id: 'lower', label: 'Lower' },
+  { id: 'upper', label: 'Upper body' },
+  { id: 'lower', label: 'Lower body' },
   { id: 'core', label: 'Core' },
   { id: 'spine', label: 'Back' },
 ]
-
-const HERO = ['sun-reach', 'squat', 'down-dog', 'warrior-2', 'push-up', 'cat-cow', 'hundred', 'tree', 'bird-dog', 'boat', 'teaser', 'inchworm']
-
-const QUICK: { label: string; sub: string; icon: typeof Sunrise; color: string; s: Partial<Settings> }[] = [
-  { label: 'Wake-up flow', sub: '10 min', icon: Sunrise, color: '#ffc766', s: { minutes: 10, focus: 'flow', intensity: 'gentle', target: 'any' } },
-  { label: 'Desk reset', sub: '10 min', icon: Coffee, color: '#5fd8c0', s: { minutes: 10, focus: 'calm', intensity: 'gentle', target: 'spine' } },
-  { label: 'Core burner', sub: '20 min', icon: Flame, color: '#ffb057', s: { minutes: 20, focus: 'strength', intensity: 'steady', target: 'core' } },
-  { label: 'Full strength', sub: '30 min', icon: Dumbbell, color: '#ff7a59', s: { minutes: 30, focus: 'strength', intensity: 'strong', target: 'any' } },
+const INTENSITIES: { id: Intensity; label: string }[] = [
+  { id: 'gentle', label: 'Gentle' },
+  { id: 'steady', label: 'Steady' },
+  { id: 'strong', label: 'Strong' },
 ]
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
 }
 
-function greeting() {
-  const h = new Date().getHours()
-  return h < 5 ? 'Up late' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
-}
-
-export function Home({ settings, prefs, onSettings, onPrefs, onBuild, onLibrary }: Props) {
-  const [hero, setHero] = useState(() => Math.floor(Math.random() * HERO.length))
+export function Home({ settings, prefs, recents, onSettings, onPrefs, onBuild, onOpenRecent, onClearRecents, onLibrary }: Props) {
   const [install, setInstall] = useState<BeforeInstallPromptEvent | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const set = (p: Partial<Settings>) => onSettings({ ...settings, ...p })
 
   useEffect(() => {
-    const id = setInterval(() => setHero((h) => (h + 1) % HERO.length), 7000)
     const onPrompt = (e: Event) => {
       e.preventDefault()
       setInstall(e as BeforeInstallPromptEvent)
     }
     window.addEventListener('beforeinstallprompt', onPrompt)
-    return () => {
-      clearInterval(id)
-      window.removeEventListener('beforeinstallprompt', onPrompt)
-    }
+    return () => window.removeEventListener('beforeinstallprompt', onPrompt)
   }, [])
 
-  const move = MOVE_BY_ID[HERO[hero]]
-  const HeroIcon = CAT_ICON[move.cat]
+  const pickTheme = (id: string) => {
+    if (id === '' || settings.theme === id) return set({ theme: null })
+    set({ ...THEME_BY_ID[id].set, theme: id })
+  }
 
   return (
     <main className="screen home">
@@ -93,138 +77,92 @@ export function Home({ settings, prefs, onSettings, onPrefs, onBuild, onLibrary 
         </div>
       </header>
 
-      <section className="greet">
-        <p className="eyebrow">{greeting()}</p>
-        <h1>What feels good today?</h1>
-      </section>
+      <div className="build">
+        <Field label="Theme">
+          <Pills
+            label="Theme"
+            options={[{ id: '', label: 'None' }, ...THEMES.map((t) => ({ id: t.id, label: t.label }))]}
+            isOn={(id) => (settings.theme ?? '') === id}
+            onPick={pickTheme}
+          />
+        </Field>
 
-      <section className="hero" style={{ ['--c' as string]: CAT_META[move.cat].color }}>
-        <div className="hero-stage" key={move.id}>
-          <LiveFigure anim={move.anim} tempo={move.tempo} accent={CAT_META[move.cat].color} />
-        </div>
-        <div className="hero-caption" key={move.id + 'c'}>
-          <span className="chip">
-            <HeroIcon size={13} strokeWidth={2.4} />
-            {CAT_META[move.cat].label}
-          </span>
-          <span className="hero-name">{move.name}</span>
-        </div>
-      </section>
+        <Field label="Duration">
+          <Pills
+            label="Duration"
+            options={MINUTES.map((m) => ({ id: m, label: `${m} min` }))}
+            isOn={(m) => settings.minutes === m}
+            onPick={(m) => set({ minutes: m })}
+          />
+        </Field>
 
-      <section className="panel">
-        <div className="panel-label">
-          <Clock size={15} /> Duration
-        </div>
-        <div className="seg" role="radiogroup" aria-label="Duration">
-          {MINUTES.map((m) => (
-            <button key={m} role="radio" aria-checked={settings.minutes === m} className={settings.minutes === m ? 'on' : ''} onClick={() => set({ minutes: m })}>
-              {m}
-              <small>min</small>
-            </button>
-          ))}
-        </div>
+        <Field label="Focus">
+          <Pills label="Focus" options={FOCI} isOn={(f) => settings.focus === f} onPick={(f) => set({ focus: f })} />
+        </Field>
 
-        <div className="panel-label">
-          <Sparkles size={15} /> Focus
-        </div>
-        <div className="focus-grid" role="radiogroup" aria-label="Focus">
-          {FOCI.map((f) => {
-            const Icon = FOCUS_MODE_ICON[f.id]
-            const on = settings.focus === f.id
-            return (
-              <button
-                key={f.id}
-                role="radio"
-                aria-checked={on}
-                className={`focus ${on ? 'on' : ''}`}
-                style={{ ['--c' as string]: f.color }}
-                onClick={() => set({ focus: f.id })}
-              >
-                <span className="focus-icon">
-                  <Icon size={19} strokeWidth={2} />
-                </span>
-                <strong>{f.label}</strong>
-                <small>{f.hint}</small>
-              </button>
-            )
-          })}
-        </div>
+        <Field label="Target">
+          <Pills
+            label="Target"
+            options={TARGETS}
+            isOn={(t) => (settings.target ?? 'any') === t}
+            onPick={(t) => set({ target: t })}
+          />
+        </Field>
 
-        <div className="panel-label">
-          <TargetIcon /> Target
-        </div>
-        <div className="chips-scroll" role="radiogroup" aria-label="Target area">
-          {TARGETS.map((t) => {
-            const Icon = TARGET_ICON[t.id]
-            const on = (settings.target ?? 'any') === t.id
-            return (
-              <button key={t.id} role="radio" aria-checked={on} className={`select-chip ${on ? 'on' : ''}`} onClick={() => set({ target: t.id })}>
-                <Icon size={15} /> {t.label}
-              </button>
-            )
-          })}
-        </div>
+        <Field label="Intensity">
+          <Pills
+            label="Intensity"
+            options={INTENSITIES}
+            isOn={(i) => settings.intensity === i}
+            onPick={(i) => set({ intensity: i })}
+          />
+        </Field>
 
-        <div className="panel-label">
-          <Gauge size={15} /> Intensity
-        </div>
-        <div className="seg" role="radiogroup" aria-label="Intensity">
-          {INTENSITIES.map((i) => (
-            <button key={i.id} role="radio" aria-checked={settings.intensity === i.id} className={settings.intensity === i.id ? 'on' : ''} onClick={() => set({ intensity: i.id })}>
-              <span className="bars" aria-hidden>
-                {[1, 2, 3].map((b) => (
-                  <i key={b} className={b <= i.bars ? 'lit' : ''} />
-                ))}
+        <Field label="Equipment">
+          <Pills
+            label="Equipment"
+            multi
+            options={[
+              { id: 'dumbbells', label: 'Dumbbells' },
+              { id: 'band', label: 'Elastic band' },
+            ]}
+            isOn={(e) => settings[e as 'dumbbells' | 'band']}
+            onPick={(e) => set({ [e]: !settings[e as 'dumbbells' | 'band'] })}
+          />
+        </Field>
+      </div>
+
+      {recents.length > 0 && (
+        <section className="recents">
+          <div className="field-label">
+            <span>Recent</span>
+            <button className="text-btn" onClick={onClearRecents}>Clear</button>
+          </div>
+          {recents.slice(0, 4).map((r) => (
+            <button key={r.code} className="recent-row" onClick={() => onOpenRecent(r.code)}>
+              <RotateCcw size={17} className="muted" />
+              <span className="row-text">
+                <strong>{r.label}</strong>
+                <small>
+                  {fmtDur(r.secs)} · {ago(r.at)}
+                </small>
               </span>
-              {i.label}
+              <ChevronRight size={18} className="muted" />
             </button>
           ))}
-        </div>
-
-        <button className="row-toggle" role="switch" aria-checked={settings.dumbbells} onClick={() => set({ dumbbells: !settings.dumbbells })}>
-          <span className="row-icon">
-            <Dumbbell size={18} />
-          </span>
-          <span className="row-text">
-            <strong>Dumbbells</strong>
-            <small>{settings.dumbbells ? 'Weighted moves included' : 'Bodyweight only'}</small>
-          </span>
-          <i className={`switch ${settings.dumbbells ? 'on' : ''}`} />
-        </button>
-      </section>
-
-      <section>
-        <h2 className="section-title">Quick start</h2>
-        <div className="quick">
-          {QUICK.map((q) => (
-            <button
-              key={q.label}
-              className="quick-card"
-              style={{ ['--c' as string]: q.color }}
-              onClick={() => onBuild({ ...settings, ...q.s })}
-            >
-              <span className="quick-icon">
-                <q.icon size={20} />
-              </span>
-              <strong>{q.label}</strong>
-              <small>{q.sub}</small>
-            </button>
-          ))}
-        </div>
-      </section>
+        </section>
+      )}
 
       <div className="dock">
-        <button className="cta" onClick={() => onBuild()}>
-          <Sparkles size={19} />
+        <button className="cta" onClick={onBuild}>
+          <Sparkles size={18} />
           Build my session
-          <span className="cta-meta">{settings.minutes} min</span>
         </button>
       </div>
 
       {showSettings && (
         <Sheet title="Settings" onClose={() => setShowSettings(false)}>
           <div className="settings">
-            <SettingRow icon={Mic} title="Voice guidance" sub="Announces moves, sides and breath" on={settings.voice} onChange={(v) => set({ voice: v })} />
             <SettingRow icon={Bell} title="Chimes" sub="Count-in ticks and transitions" on={settings.chimes} onChange={(v) => set({ chimes: v })} />
             <div className="setting">
               <span className="row-icon">
@@ -234,14 +172,21 @@ export function Home({ settings, prefs, onSettings, onPrefs, onBuild, onLibrary 
                 <strong>Get-ready time</strong>
                 <small>Before each move</small>
               </span>
-              <div className="seg mini">
+              <div className="pills tight">
                 {[5, 7, 10].map((s) => (
-                  <button key={s} className={settings.readySecs === s ? 'on' : ''} onClick={() => set({ readySecs: s })}>
+                  <button key={s} className={`pill ${settings.readySecs === s ? 'on' : ''}`} onClick={() => set({ readySecs: s })}>
                     {s}s
                   </button>
                 ))}
               </div>
             </div>
+            <SettingRow
+              icon={Box}
+              title="3D figure (experimental)"
+              sub="Drag to orbit the figure while you train"
+              on={settings.view3d}
+              onChange={(v) => set({ view3d: v })}
+            />
             <div className="setting">
               <span className="row-icon">
                 <Heart size={18} />
@@ -301,14 +246,9 @@ export function Home({ settings, prefs, onSettings, onPrefs, onBuild, onLibrary 
   )
 }
 
-function TargetIcon() {
-  const Icon = TARGET_ICON.core
-  return <Icon size={15} />
-}
-
 function SettingRow({
   icon: Icon, title, sub, on, onChange,
-}: { icon: typeof Mic; title: string; sub: string; on: boolean; onChange: (v: boolean) => void }) {
+}: { icon: typeof Bell; title: string; sub: string; on: boolean; onChange: (v: boolean) => void }) {
   return (
     <button className="setting" role="switch" aria-checked={on} onClick={() => onChange(!on)}>
       <span className="row-icon">
