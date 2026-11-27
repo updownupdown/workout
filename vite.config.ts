@@ -36,9 +36,17 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,webp,woff2}'],
         globIgnores: ['**/realistic*', '**/realistic/**'],
         navigateFallbackDenylist: [/realistic/],
+        // Realistic figure models (~0.6 MB each) are fetched on first use, then kept for offline.
+        runtimeCaching: [
+          {
+            urlPattern: /\/realistic\/.*\.(glb|webp)$/,
+            handler: 'CacheFirst',
+            options: { cacheName: 'flow-figures', expiration: { maxEntries: 40 } },
+          },
+        ],
       },
     }),
   ],

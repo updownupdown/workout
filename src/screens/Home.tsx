@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import {
-  Bell, Box, Cable, ChevronRight, Clock, Download, Dumbbell, EyeOff, Flame, Flower2, Footprints, Gauge, Heart, Hourglass,
+  Cable, ChevronRight, Clock, Dumbbell, Flame, Flower2, Footprints, Gauge,
   LayoutGrid, Leaf, Monitor, Moon, PersonStanding, RotateCcw, Scale, Settings2, Shield, Sparkles, Sunrise, Target as TargetIcon,
   Waves, X, type LucideIcon,
 } from 'lucide-react'
 import { FocusMode, Intensity, Prefs, Settings, Target } from '../engine/generator'
 import { THEMES, THEME_BY_ID } from '../engine/themes'
-import { Sheet } from '../ui/Sheet'
+import { SettingsSheet } from './SettingsSheet'
 import { Logo } from '../ui/Logo'
 import { Field } from '../ui/Pills'
 import { Checks, LevelBars, Segmented, Tiles } from '../ui/Choice'
@@ -186,104 +186,23 @@ export function Home({ settings, prefs, recents, onSettings, onPrefs, onBuild, o
       </div>
 
       {showSettings && (
-        <Sheet title="Settings" onClose={() => setShowSettings(false)}>
-          <div className="settings">
-            <SettingRow icon={Bell} title="Chimes" sub="Count-in ticks and transitions" on={settings.chimes} onChange={(v) => set({ chimes: v })} />
-            <div className="setting">
-              <span className="row-icon">
-                <Hourglass size={18} />
-              </span>
-              <span className="row-text">
-                <strong>Get-ready time</strong>
-                <small>Before each move</small>
-              </span>
-              <div className="pills tight">
-                {[5, 7, 10].map((s) => (
-                  <button key={s} className={`pill ${settings.readySecs === s ? 'on' : ''}`} onClick={() => set({ readySecs: s })}>
-                    {s}s
-                  </button>
-                ))}
-              </div>
-            </div>
-            <SettingRow
-              icon={Box}
-              title="3D figure (experimental)"
-              sub="Drag to orbit the figure while you train"
-              on={settings.view3d}
-              onChange={(v) => set({ view3d: v })}
-            />
-            <div className="setting">
-              <span className="row-icon">
-                <Heart size={18} />
-              </span>
-              <span className="row-text">
-                <strong>Favourites</strong>
-                <small>{prefs.fav.length ? `${prefs.fav.length} moves show up more often` : 'Heart moves in the library'}</small>
-              </span>
-              {prefs.fav.length > 0 && (
-                <button className="text-btn" onClick={() => onPrefs({ ...prefs, fav: [] })}>Clear</button>
-              )}
-            </div>
-            <div className="setting">
-              <span className="row-icon">
-                <EyeOff size={18} />
-              </span>
-              <span className="row-text">
-                <strong>Hidden moves</strong>
-                <small>{prefs.hidden.length ? `${prefs.hidden.length} never suggested` : 'None hidden'}</small>
-              </span>
-              {prefs.hidden.length > 0 && (
-                <button className="text-btn" onClick={() => onPrefs({ ...prefs, hidden: [] })}>Restore</button>
-              )}
-            </div>
-            <button className="setting link" onClick={() => { setShowSettings(false); onLibrary() }}>
-              <span className="row-icon">
-                <LayoutGrid size={18} />
-              </span>
-              <span className="row-text">
-                <strong>Move library</strong>
-                <small>Browse, favourite or hide moves</small>
-              </span>
-              <ChevronRight size={18} className="muted" />
-            </button>
-            {install && (
-              <button
-                className="setting link"
-                onClick={async () => {
+        <SettingsSheet
+          settings={settings}
+          prefs={prefs}
+          onSettings={onSettings}
+          onPrefs={onPrefs}
+          onLibrary={onLibrary}
+          onInstall={
+            install
+              ? async () => {
                   await install.prompt()
                   setInstall(null)
-                }}
-              >
-                <span className="row-icon">
-                  <Download size={18} />
-                </span>
-                <span className="row-text">
-                  <strong>Install app</strong>
-                  <small>Add Flow to this device</small>
-                </span>
-                <ChevronRight size={18} className="muted" />
-              </button>
-            )}
-          </div>
-        </Sheet>
+                }
+              : null
+          }
+          onClose={() => setShowSettings(false)}
+        />
       )}
     </main>
-  )
-}
-
-function SettingRow({
-  icon: Icon, title, sub, on, onChange,
-}: { icon: typeof Bell; title: string; sub: string; on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button className="setting" role="switch" aria-checked={on} onClick={() => onChange(!on)}>
-      <span className="row-icon">
-        <Icon size={18} />
-      </span>
-      <span className="row-text">
-        <strong>{title}</strong>
-        <small>{sub}</small>
-      </span>
-      <i className={`switch ${on ? 'on' : ''}`} />
-    </button>
   )
 }

@@ -3,6 +3,7 @@ import { THEME_BY_ID } from './themes'
 
 export type FocusMode = 'balanced' | 'strength' | 'flow' | 'calm'
 export type Intensity = 'gentle' | 'steady' | 'strong'
+export type Figure3DKind = 'ava' | 'leo' | 'mannequin'
 export type Target = 'any' | 'upper' | 'lower' | 'core' | 'spine'
 
 export interface Settings {
@@ -16,8 +17,10 @@ export interface Settings {
   /** Optional theme preset that boosts certain moves (see themes.ts). */
   theme: string | null
   chimes: boolean
-  /** Experimental three.js figure in the player and move sheets. */
+  /** 3D figure in the player instead of the 2D mannequin. */
   view3d: boolean
+  /** Which 3D figure: a realistic person or the simple 3D mannequin. */
+  figure3d: Figure3DKind
   /** Seconds to get into position before each step. */
   readySecs: number
 }
@@ -32,6 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: null,
   chimes: true,
   view3d: false,
+  figure3d: 'ava',
   readySecs: 7,
 }
 

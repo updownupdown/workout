@@ -1,11 +1,11 @@
 # Realistic 3D figure (prototype)
 
-Live: `https://updownupdown.github.io/workout/realistic.html` (separate page; the app's own figure is unchanged).
+In the app: Settings → Figure → 3D, then pick Ava, Leo or the simple Mannequin. Playground with every move: `https://updownupdown.github.io/workout/realistic.html`.
 
 ## What it is
 
 - A rigged, textured human (two characters) rendered with three.js, driven by the **same pose data** as the 2D mannequin. Every move in the app plays; there is no per-move 3D animation work.
-- Source: `src/realistic/` (`rig.ts` does the retargeting, `main.ts` the scene and UI). Asset pipeline: `scripts/realistic/`.
+- Source: `src/figure/real/` (`rig.ts` retargeting, `dqs.ts` dual-quaternion skinning, `scene.ts` stage and loading), `src/figure/FigureReal.tsx` for the player, `src/realistic/` for the playground page. Asset pipeline: `scripts/realistic/`.
 
 ## How the pose data drives the rig
 
@@ -32,7 +32,10 @@ Microsoft Rocketbox Avatar Library, MIT licence since Dec 2020 (commercial use a
 
 ## Known limits / what "production" would add
 
-- Linear-blend skinning: deep hip and knee flexion (down dog, child's pose) pinches the mesh. Fix: dual-quaternion skinning or corrective blend shapes.
+- Skinning is dual-quaternion (GPU shader patch plus the same maths on the CPU for floor contacts), which removes the worst shoulder and hip pinching. Loose clothing (Leo's shorts) still flares in very deep hip flexion; corrective blend shapes would be the next step.
+- Hands: the data only has wrist bend, so the forearm pronates as the wrist bends (palms flat for push-ups, down dog, planks); half the twist goes in the forearm, half at the wrist.
+- Shoulders: collarbones lift slightly as arms go overhead; deep hip flexion tips the pelvis toward the thighs.
+- Sided moves on the left side mirror the pose data (left and right swapped) rather than mirroring the mesh.
 - Out-of-plane motion: data is 2D, so no twisting, rotation or crossing the midline. Some moves would need a third angle per joint.
 - Hands are a fixed relaxed pose; no finger posing. Dumbbells and bands are not drawn yet.
 - Muscle highlight would need a mask texture per muscle group.
