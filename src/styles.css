@@ -145,6 +145,53 @@ h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
 .pill-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .pills.tight { flex-wrap: nowrap; gap: 6px; }
 .pills.tight .pill { height: 34px; padding: 0 12px; font-size: 14px; }
+.field-name { display: inline-flex; align-items: center; gap: 8px; }
+.clear-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 0 2px; color: var(--ink-2); font-size: 14px; font-weight: 500; }
+
+/* Short single choices share one track. Selected = ink fill, same as pills. */
+.seg {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 4px;
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 16px;
+}
+.seg-btn {
+  display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 46px; padding: 0 4px;
+  border-radius: 12px; color: var(--ink-2); font-size: 15px; font-weight: 500;
+  transition: background 0.18s, color 0.18s, transform 0.12s;
+}
+.seg-btn:active { transform: scale(0.96); }
+.seg-btn.on { background: var(--ink); color: #121318; }
+.seg.stacked .seg-btn { flex-direction: column; gap: 5px; min-height: 66px; font-size: 14px; }
+.seg.stacked .seg-btn svg { height: 18px; }
+.seg.duration .seg-btn { flex-direction: column; gap: 3px; min-height: 54px; }
+.seg-num { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; color: var(--ink); }
+.seg-btn.on .seg-num { color: #121318; }
+.seg-unit { font-size: 12px; line-height: 1; }
+
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; height: 78px; padding: 0 6px;
+  border-radius: 16px; background: var(--surface-2); border: 1px solid var(--line-2); font-size: 14px; font-weight: 500;
+  transition: background 0.18s, color 0.18s, border-color 0.18s, transform 0.12s;
+}
+.tile svg { color: var(--ink-2); }
+.tile:active { transform: scale(0.96); }
+.tile.on { background: var(--ink); color: #121318; border-color: var(--ink); }
+.tile.on svg { color: #121318; }
+
+.checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.check-tile {
+  display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 14px; text-align: left;
+  border-radius: 16px; background: var(--surface-2); border: 1px solid var(--line-2); font-size: 15px; font-weight: 500;
+  transition: background 0.18s, color 0.18s, border-color 0.18s, transform 0.12s;
+}
+.check-tile:active { transform: scale(0.97); }
+.check-label { flex: 1; min-width: 0; }
+.check-tile .box {
+  width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid rgba(255, 255, 255, 0.35);
+  display: grid; place-items: center; flex: none;
+}
+.check-tile.on { background: var(--ink); color: #121318; border-color: var(--ink); }
+.check-tile.on .box { background: #121318; border-color: #121318; color: var(--ink); }
 
 .recents { display: flex; flex-direction: column; gap: 8px; }
 .recent-row {

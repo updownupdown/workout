@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Bell, Box, ChevronRight, Download, EyeOff, Heart, Hourglass, LayoutGrid, RotateCcw, Settings2, Sparkles } from 'lucide-react'
+import {
+  Bell, Box, Cable, ChevronRight, Clock, Download, Dumbbell, EyeOff, Flame, Flower2, Footprints, Gauge, Heart, Hourglass,
+  LayoutGrid, Leaf, Monitor, Moon, PersonStanding, RotateCcw, Scale, Settings2, Shield, Sparkles, Sunrise, Target as TargetIcon,
+  Waves, X, type LucideIcon,
+} from 'lucide-react'
 import { FocusMode, Intensity, Prefs, Settings, Target } from '../engine/generator'
 import { THEMES, THEME_BY_ID } from '../engine/themes'
 import { Sheet } from '../ui/Sheet'
 import { Logo } from '../ui/Logo'
-import { Field, Pills } from '../ui/Pills'
+import { Field } from '../ui/Pills'
+import { Checks, LevelBars, Segmented, Tiles } from '../ui/Choice'
 import { ago, Recent } from '../recent'
 import { fmtDur } from './format'
 
@@ -21,24 +26,28 @@ interface Props {
 }
 
 const MINUTES = [10, 15, 20, 30, 45]
-const FOCI: { id: FocusMode; label: string }[] = [
-  { id: 'balanced', label: 'Balanced' },
-  { id: 'strength', label: 'Strength' },
-  { id: 'flow', label: 'Flow' },
-  { id: 'calm', label: 'Calm' },
+const FOCI: { id: FocusMode; label: string; icon: LucideIcon }[] = [
+  { id: 'balanced', label: 'Balanced', icon: Scale },
+  { id: 'strength', label: 'Strength', icon: Dumbbell },
+  { id: 'flow', label: 'Flow', icon: Waves },
+  { id: 'calm', label: 'Calm', icon: Leaf },
 ]
-const TARGETS: { id: Target; label: string }[] = [
-  { id: 'any', label: 'Whole body' },
-  { id: 'upper', label: 'Upper body' },
-  { id: 'lower', label: 'Lower body' },
-  { id: 'core', label: 'Core' },
-  { id: 'spine', label: 'Back' },
+const TARGETS: { id: Target; label: string; name: string }[] = [
+  { id: 'any', label: 'Whole', name: 'Whole body' },
+  { id: 'upper', label: 'Upper', name: 'Upper body' },
+  { id: 'lower', label: 'Lower', name: 'Lower body' },
+  { id: 'core', label: 'Core', name: 'Core' },
+  { id: 'spine', label: 'Back', name: 'Back' },
 ]
-const INTENSITIES: { id: Intensity; label: string }[] = [
-  { id: 'gentle', label: 'Gentle' },
-  { id: 'steady', label: 'Steady' },
-  { id: 'strong', label: 'Strong' },
+const INTENSITIES: { id: Intensity; label: string; icon: () => React.ReactNode }[] = [
+  { id: 'gentle', label: 'Gentle', icon: () => <LevelBars level={0} /> },
+  { id: 'steady', label: 'Steady', icon: () => <LevelBars level={1} /> },
+  { id: 'strong', label: 'Strong', icon: () => <LevelBars level={2} /> },
 ]
+const THEME_ICONS: Record<string, LucideIcon> = {
+  hips: Flower2, back: Shield, 'post-run': Footprints, wake: Sunrise, desk: Monitor,
+  core: Flame, strength: Dumbbell, band: Cable, wind: Moon,
+}
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -78,56 +87,72 @@ export function Home({ settings, prefs, recents, onSettings, onPrefs, onBuild, o
       </header>
 
       <div className="build">
-        <Field label="Theme">
-          <Pills
+        <Field
+          label="Theme"
+          icon={Sparkles}
+          aside={
+            settings.theme && (
+              <button className="clear-btn" onClick={() => set({ theme: null })}>
+                <X size={14} />
+                Clear
+              </button>
+            )
+          }
+        >
+          <Tiles
             label="Theme"
-            options={[{ id: '', label: 'None' }, ...THEMES.map((t) => ({ id: t.id, label: t.label }))]}
-            isOn={(id) => (settings.theme ?? '') === id}
+            options={THEMES.map((t) => ({ id: t.id, label: t.label, icon: THEME_ICONS[t.id] ?? Sparkles }))}
+            value={settings.theme ?? null}
             onPick={pickTheme}
           />
         </Field>
 
-        <Field label="Duration">
-          <Pills
+        <Field label="Duration" icon={Clock}>
+          <Segmented
             label="Duration"
-            options={MINUTES.map((m) => ({ id: m, label: `${m} min` }))}
-            isOn={(m) => settings.minutes === m}
+            className="duration"
+            options={MINUTES.map((m) => ({
+              id: m,
+              name: `${m} minutes`,
+              label: (
+                <>
+                  <span className="seg-num">{m}</span>
+                  <span className="seg-unit">min</span>
+                </>
+              ),
+            }))}
+            value={settings.minutes}
             onPick={(m) => set({ minutes: m })}
           />
         </Field>
 
-        <Field label="Focus">
-          <Pills label="Focus" options={FOCI} isOn={(f) => settings.focus === f} onPick={(f) => set({ focus: f })} />
+        <Field label="Focus" icon={TargetIcon}>
+          <Segmented label="Focus" stacked options={FOCI} value={settings.focus} onPick={(f) => set({ focus: f })} />
         </Field>
 
-        <Field label="Target">
-          <Pills
-            label="Target"
-            options={TARGETS}
-            isOn={(t) => (settings.target ?? 'any') === t}
-            onPick={(t) => set({ target: t })}
-          />
+        <Field label="Target" icon={PersonStanding}>
+          <Segmented label="Target" options={TARGETS} value={settings.target ?? 'any'} onPick={(t) => set({ target: t })} />
         </Field>
 
-        <Field label="Intensity">
-          <Pills
+        <Field label="Intensity" icon={Gauge}>
+          <Segmented
             label="Intensity"
+            stacked
             options={INTENSITIES}
-            isOn={(i) => settings.intensity === i}
+            value={settings.intensity}
             onPick={(i) => set({ intensity: i })}
           />
         </Field>
 
-        <Field label="Equipment">
-          <Pills
+        <Field label="Equipment" icon={Dumbbell}>
+          <Checks
             label="Equipment"
-            multi
             options={[
-              { id: 'dumbbells', label: 'Dumbbells' },
-              { id: 'band', label: 'Elastic band' },
+              { id: 'dumbbells' as const, label: 'Dumbbells', icon: Dumbbell },
+              { id: 'band' as const, label: 'Elastic band', icon: Cable },
             ]}
-            isOn={(e) => settings[e as 'dumbbells' | 'band']}
-            onPick={(e) => set({ [e]: !settings[e as 'dumbbells' | 'band'] })}
+            isOn={(e) => settings[e]}
+            onToggle={(e) => set({ [e]: !settings[e] })}
           />
         </Field>
       </div>
