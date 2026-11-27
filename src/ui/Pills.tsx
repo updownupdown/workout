@@ -42,11 +42,16 @@ export function Pills<T extends string | number>({ label, options, isOn, onPick,
   )
 }
 
-export function Field({ label, children, aside }: { label: string; children: React.ReactNode; aside?: React.ReactNode }) {
+export function Field({
+  label, icon: Icon, children, aside,
+}: { label: string; icon?: LucideIcon; children: React.ReactNode; aside?: React.ReactNode }) {
   return (
     <section className="field">
       <div className="field-label">
-        <span>{label}</span>
+        <span className="field-name">
+          {Icon && <Icon size={16} />}
+          {label}
+        </span>
         {aside}
       </div>
       {children}
