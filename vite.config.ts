@@ -1,12 +1,19 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { resolve } from 'node:path'
 
 // Served from https://<user>.github.io/workout/
 const base = process.env.BASE_PATH ?? '/workout/'
 
 export default defineConfig({
   base,
+  build: {
+    rollupOptions: {
+      // Separate prototype page for the realistic 3D figure; it is not part of the app shell.
+      input: { main: resolve(__dirname, 'index.html'), realistic: resolve(__dirname, 'realistic.html') },
+    },
+  },
   plugins: [
     react(),
     VitePWA({
@@ -30,6 +37,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        globIgnores: ['**/realistic*', '**/realistic/**'],
+        navigateFallbackDenylist: [/realistic/],
       },
     }),
   ],
