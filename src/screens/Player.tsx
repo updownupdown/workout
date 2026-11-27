@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react'
-import { breathCycleSecs, Session, Step, TRANSITION } from '../engine/generator'
+import { Pause, Play, SkipBack, SkipForward, Volume2, VolumeX, X, ArrowLeftRight, Repeat } from 'lucide-react'
+import { breathCycleSecs, readyOf, Session, Step } from '../engine/generator'
+import { CAT_ICON } from '../ui/icons'
 import { Figure } from '../figure/Figure'
 import { BreathPhase, CAT_META } from '../data/moves'
 import { chime, keepAwake, say, unlockAudio } from '../engine/cues'
@@ -7,6 +9,8 @@ import { fmtClock, stepLabel } from './format'
 
 interface Props {
   session: Session
+  voice: boolean
+  onVoice: (v: boolean) => void
   onExit: () => void
   onDone: () => void
 }
@@ -54,8 +58,9 @@ function announce(st: Step, first: boolean, prev?: Step) {
   return `${first ? "Let's begin. " : 'Next, '}${name}${side}. ${amount}`.trim()
 }
 
-export function Player({ session, onExit, onDone }: Props) {
+export function Player({ session, voice, onVoice, onExit, onDone }: Props) {
   const steps = session.steps
+  const TRANSITION = readyOf(session.settings)
   const clock = useRef<Clock>({ i: 0, phase: 'ready', t: 0, paused: false, fired: new Set() })
   const [, render] = useReducer((x: number) => x + 1, 0)
 
@@ -135,7 +140,7 @@ export function Player({ session, onExit, onDone }: Props) {
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [steps, goto])
+  }, [steps, goto, TRANSITION])
 
   // Wake lock, pause when hidden, keyboard shortcuts
   useEffect(() => {
@@ -186,6 +191,7 @@ export function Player({ session, onExit, onDone }: Props) {
   const st = steps[c.i]
   const m = st.move
   const meta = CAT_META[m.cat]
+  const CatIcon = CAT_ICON[m.cat]
   const next = steps[c.i + 1]
 
   // Figure time
@@ -216,8 +222,8 @@ export function Player({ session, onExit, onDone }: Props) {
       style={{ ['--c' as string]: meta.color }}
     >
       <header className="player-top">
-        <button className="icon-btn" onClick={onExit} aria-label="End session">
-          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        <button className="icon-btn ghost" onClick={onExit} aria-label="End session">
+          <X size={22} />
         </button>
         <div className="segments" aria-hidden>
           {steps.map((s, k) => (
@@ -231,6 +237,9 @@ export function Player({ session, onExit, onDone }: Props) {
           ))}
         </div>
         <span className="remaining">{fmtClock(remaining)}</span>
+        <button className="icon-btn ghost" onClick={() => onVoice(!voice)} aria-label={voice ? 'Mute voice' : 'Unmute voice'}>
+          {voice ? <Volume2 size={20} /> : <VolumeX size={20} />}
+        </button>
       </header>
 
       <section className="stage" onClick={togglePause}>
@@ -258,17 +267,29 @@ export function Player({ session, onExit, onDone }: Props) {
         )}
         {c.paused && (
           <div className="paused-badge">
-            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-            Paused
+            <span>
+              <Play size={30} fill="currentColor" />
+            </span>
+            Paused · tap to resume
           </div>
         )}
       </section>
 
       <section className="info">
         <div className="info-head">
-          <span className="chip" style={{ ['--c' as string]: meta.color }}>{meta.label}</span>
-          {st.side && <span className="chip side">{st.side === 'right' ? 'Right side' : 'Left side'}</span>}
-          {st.round && <span className="chip side">Round {st.round}</span>}
+          <span className="chip">
+            <CatIcon size={13} strokeWidth={2.4} /> {meta.label}
+          </span>
+          {st.side && (
+            <span className="chip neutral">
+              <ArrowLeftRight size={12} /> {st.side === 'right' ? 'Right side' : 'Left side'}
+            </span>
+          )}
+          {st.round && (
+            <span className="chip neutral">
+              <Repeat size={12} /> Round {st.round}
+            </span>
+          )}
         </div>
         <h1 className="move-name">{m.name}</h1>
         <p className="cue" key={cueIdx + c.phase}>
@@ -303,28 +324,30 @@ export function Player({ session, onExit, onDone }: Props) {
         </div>
 
         <div className="controls">
-          <button className="icon-btn" onClick={back} aria-label="Previous">
-            <svg viewBox="0 0 24 24"><path d="M18 6l-8 6 8 6zM6 6v12" /></svg>
+          <button className="ctrl" onClick={back} aria-label="Previous">
+            <SkipBack size={22} fill="currentColor" />
           </button>
           <button className="play" onClick={togglePause} aria-label={c.paused ? 'Resume' : 'Pause'}>
-            {c.paused ? (
-              <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-            ) : (
-              <svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
-            )}
+            {c.paused ? <Play size={30} fill="currentColor" /> : <Pause size={30} fill="currentColor" />}
           </button>
-          <button className="icon-btn" onClick={() => goto(c.i + 1)} aria-label="Skip">
-            <svg viewBox="0 0 24 24"><path d="M6 6l8 6-8 6zM18 6v12" /></svg>
+          <button className="ctrl" onClick={() => goto(c.i + 1)} aria-label="Skip">
+            <SkipForward size={22} fill="currentColor" />
           </button>
         </div>
 
         {next && (
-          <div className="up-next">
-            <small>Then</small>
-            <span>
-              {next.move.name}
-              {next.side ? ` · ${next.side}` : ''}
+          <div className="up-next" style={{ ['--c' as string]: CAT_META[next.move.cat].color }}>
+            <span className="thumb">
+              <Figure anim={next.move.anim} t={99} tempo={next.move.tempo} accent={CAT_META[next.move.cat].color} floor={false} flip={next.side === 'left'} />
             </span>
+            <span className="up-next-text">
+              <small>Up next</small>
+              <strong>
+                {next.move.name}
+                {next.side ? ` · ${next.side}` : ''}
+              </strong>
+            </span>
+            <span className="up-next-amt">{stepLabel(next)}</span>
           </div>
         )}
       </section>

@@ -29,6 +29,11 @@ export function say(text: string, { interrupt = true } = {}) {
   window.speechSynthesis.speak(u)
 }
 
+let chimesOn = true
+export const setChimes = (on: boolean) => {
+  chimesOn = on
+}
+
 let ctx: AudioContext | null = null
 /** Must be called from a user gesture once (iOS) to unlock audio. */
 export function unlockAudio() {
@@ -43,7 +48,7 @@ export function unlockAudio() {
 }
 
 export function chime(kind: 'tick' | 'go' | 'done' | 'soft' = 'tick') {
-  if (!ctx) return
+  if (!ctx || !chimesOn) return
   const now = ctx.currentTime
   const notes: Record<typeof kind, number[]> = {
     tick: [880],

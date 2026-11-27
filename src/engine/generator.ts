@@ -2,22 +2,37 @@ import { Category, Move, MOVES, Position } from '../data/moves'
 
 export type FocusMode = 'balanced' | 'strength' | 'flow' | 'calm'
 export type Intensity = 'gentle' | 'steady' | 'strong'
+export type Target = 'any' | 'upper' | 'lower' | 'core' | 'spine'
 
 export interface Settings {
   minutes: number
   focus: FocusMode
+  target: Target
   dumbbells: boolean
   intensity: Intensity
   voice: boolean
+  chimes: boolean
+  /** Seconds to get into position before each step. */
+  readySecs: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   minutes: 20,
   focus: 'balanced',
+  target: 'any',
   dumbbells: false,
   intensity: 'steady',
   voice: true,
+  chimes: true,
+  readySecs: 7,
 }
+
+/** Per-device move preferences. */
+export interface Prefs {
+  fav: string[]
+  hidden: string[]
+}
+export const DEFAULT_PREFS: Prefs = { fav: [], hidden: [] }
 
 export type Block = 'open' | 'warm' | 'main' | 'cool' | 'close'
 
@@ -34,12 +49,12 @@ export interface Step {
 export interface Session {
   seed: number
   settings: Settings
+  prefs: Prefs
   steps: Step[]
   totalSecs: number
 }
 
-/** Seconds given to get into position before each step. */
-export const TRANSITION = 7
+export const readyOf = (s: Settings) => s.readySecs ?? 7
 
 // ------------------------------------------------------------------ RNG
 
@@ -105,7 +120,7 @@ function size(m: Move, intensity: Intensity): { reps?: number; secs: number } {
 
 /** Total time a move takes including both sides and transitions. */
 function cost(m: Move, s: Settings) {
-  return (size(m, s.intensity).secs + TRANSITION) * (m.sided ? 2 : 1)
+  return (size(m, s.intensity).secs + readyOf(s)) * (m.sided ? 2 : 1)
 }
 
 // ------------------------------------------------------------------ recipes
@@ -144,6 +159,7 @@ const POSITION_ORDER: Position[] = ['standing', 'kneeling', 'quadruped', 'prone'
 const rank = (p: Position) => POSITION_ORDER.indexOf(p)
 
 const COOL_IDS = new Set([
+  'happy-baby', 'puppy', 'sphinx',
   'forward-fold', 'cross-shoulder', 'triceps-stretch', 'quad-stretch', 'child', 'seated-fold',
   'butterfly', 'knees-chest', 'low-lunge', 'cobra',
 ])
@@ -172,11 +188,21 @@ function gravityOrder(moves: Move[], r: Rng): Move[] {
   return out
 }
 
-function available(s: Settings) {
-  return MOVES.filter((m) => (m.equipment === 'dumbbells' ? s.dumbbells : true))
+function available(s: Settings, p: Prefs) {
+  const hidden = new Set(p.hidden)
+  return MOVES.filter((m) => (m.equipment === 'dumbbells' ? s.dumbbells : true) && !hidden.has(m.id))
 }
 
-function fill(pool: Move[], budget: number, s: Settings, r: Rng, weight: (m: Move) => number, used: Set<string>) {
+function fill(
+  pool: Move[],
+  budget: number,
+  s: Settings,
+  p: Prefs,
+  r: Rng,
+  weight: (m: Move) => number,
+  used: Set<string>,
+) {
+  const fav = new Set(p.fav)
   const out: Move[] = []
   let left = budget
   for (let guard = 0; guard < 200 && left > 20; guard++) {
@@ -188,6 +214,8 @@ function fill(pool: Move[], budget: number, s: Settings, r: Rng, weight: (m: Mov
       if (s.intensity === 'strong') w *= m.level >= 2 ? 1.4 : 0.8
       // Prefer dumbbell work when the user said they have them.
       if (s.dumbbells && m.equipment === 'dumbbells') w *= 1.6
+      if (fav.has(m.id)) w *= 2.5
+      if (s.target !== 'any' && s.target) w *= m.focus.includes(s.target) ? 3 : 0.6
       return w
     })
     if (!m) break
@@ -218,11 +246,11 @@ function toSteps(moves: Move[], block: Block, s: Settings, round?: number): Step
   return steps
 }
 
-export function generate(settings: Settings, seed: number = newSeed()): Session {
+export function generate(settings: Settings, prefs: Prefs = DEFAULT_PREFS, seed: number = newSeed()): Session {
   const r = rng(seed)
   const recipe = RECIPES[settings.focus]
   const total = settings.minutes * 60
-  const pool = available(settings)
+  const pool = available(settings, prefs)
   const used = new Set<string>()
 
   // Opening breath
@@ -231,18 +259,19 @@ export function generate(settings: Settings, seed: number = newSeed()): Session 
 
   // Closing rest (+ a breath for calm sessions)
   const close: Move[] = []
-  if (recipe.closeRest && settings.minutes >= 15) close.push(pool.find((m) => m.id === 'savasana')!)
+  const rest = MOVES.find((m) => m.id === 'savasana')!
+  if (recipe.closeRest && settings.minutes >= 15) close.push(rest)
   close.forEach((m) => used.add(m.id))
 
   const fixed = [...breaths, ...close].reduce((t, m) => t + cost(m, settings), 0)
   const flexible = Math.max(120, total - fixed)
 
   const warm = gravityOrder(
-    fill(pool.filter((m) => m.cat === 'warmup'), flexible * recipe.warm, settings, r, () => 1, used),
+    fill(pool.filter((m) => m.cat === 'warmup'), flexible * recipe.warm, settings, prefs, r, () => 1, used),
     r,
   )
   const coolMoves = gravityOrder(
-    fill(pool.filter((m) => COOL_IDS.has(m.id)), flexible * recipe.cool, settings, r, (m) => (m.cat === 'stretch' ? 2 : 1), used),
+    fill(pool.filter((m) => COOL_IDS.has(m.id)), flexible * recipe.cool, settings, prefs, r, (m) => (m.cat === 'stretch' ? 2 : 1), used),
     r,
   )
   const spent = [...warm, ...coolMoves].reduce((t, m) => t + cost(m, settings), 0)
@@ -252,6 +281,7 @@ export function generate(settings: Settings, seed: number = newSeed()): Session 
       pool.filter((m) => recipe.main[m.cat] && !COOL_IDS.has(m.id)),
       mainBudget,
       settings,
+      prefs,
       r,
       (m) => recipe.main[m.cat] ?? 0,
       used,
@@ -265,11 +295,11 @@ export function generate(settings: Settings, seed: number = newSeed()): Session 
   }
   steps.push(...toSteps(coolMoves, 'cool', settings), ...toSteps(close, 'close', settings))
 
-  return { seed, settings, steps, totalSecs: sessionSecs(steps) }
+  return { seed, settings, prefs, steps, totalSecs: sessionSecs(steps, settings) }
 }
 
-export function sessionSecs(steps: Step[]) {
-  return steps.reduce((t, st) => t + st.secs + TRANSITION, 0)
+export function sessionSecs(steps: Step[], s: Settings) {
+  return steps.reduce((t, st) => t + st.secs + readyOf(s), 0)
 }
 
 /** Swap one move (and its other side / other rounds) for a fresh one from the same family. */
@@ -285,7 +315,7 @@ export function swapMove(session: Session, moveId: string, block: Block): Sessio
       : block === 'open' || block === 'close'
         ? m.cat === old.move.cat
         : m.cat === old.move.cat || (block === 'main' && RECIPES[s.focus].main[m.cat] && !COOL_IDS.has(m.id))
-  const candidates = available(s).filter((m) => !inUse.has(m.id) && sameFamily(m) && m.cat !== 'rest')
+  const candidates = available(s, session.prefs).filter((m) => !inUse.has(m.id) && sameFamily(m) && m.cat !== 'rest')
   if (!candidates.length) return session
   // Prefer the same position so the flow stays smooth.
   const pick =
@@ -303,5 +333,5 @@ export function swapMove(session: Session, moveId: string, block: Block): Sessio
     }
     steps.push(st)
   }
-  return { ...session, steps, totalSecs: sessionSecs(steps) }
+  return { ...session, steps, totalSecs: sessionSecs(steps, s) }
 }

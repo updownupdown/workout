@@ -72,7 +72,7 @@ Because the angles are anatomical (hip flexion, shoulder flexion…), the **same
 - `src/figure/skeleton.ts`: pose model, forward kinematics, grounding.
 - `src/figure/anim.ts`: keyframes, tempo, auto-framing.
 - `src/figure/Figure.tsx`: SVG renderer.
-- `src/data/moves.ts`: the move library (45 moves) with cues, timing and keyframes.
+- `src/data/moves.ts`: the move library (67 moves) with cues, timing and keyframes.
 - `src/engine/generator.ts`: recipes, budget fill, gravity ordering, swaps.
 - `src/engine/cues.ts`: voice, chimes, wake lock.
 - `src/screens/*`: Home, Preview, Player, Done, Library, PoseSheet (dev).

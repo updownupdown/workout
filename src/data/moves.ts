@@ -446,7 +446,7 @@ export const MOVES: Move[] = [
     id: 'knees-chest', name: 'Knees to chest', cat: 'stretch', position: 'supine', focus: ['spine', 'lower'],
     kind: 'time', secs: 30, tempo: 3, level: 1,
     cues: ['Hug both knees in', 'Low back melts into the mat', 'Rock gently if it feels good'],
-    anim: hold('side', 'pelvis', HOOK, { ...SUPINE, ...sym(55, 95), ...legs(125, 125, 20) }),
+    anim: hold('side', 'pelvis', HOOK, { ...SUPINE, ...sym(38, 50), ...legs(125, 125, 20) }),
   },
   {
     id: 'cross-shoulder', name: 'Cross-body shoulder', cat: 'stretch', position: 'standing', focus: ['upper'],
@@ -465,6 +465,120 @@ export const MOVES: Move[] = [
     kind: 'time', secs: 40, tempo: 3, level: 1,
     cues: ['Soles of the feet together', 'Let the knees fall open', 'Sit tall, then fold if you like'],
     anim: hold('front', 'pelvis', { ...legs(40, 30), ...sym(15, 10) }, { ...legs(72, 150), ...sym(22, 30) }),
+  },
+
+
+  // ----------------------------------------------------------------- more strength / warm-up
+  {
+    id: 'goblet-squat', name: 'Goblet squat', cat: 'strength', position: 'standing', focus: ['lower', 'core'],
+    kind: 'reps', reps: 10, tempo: 3.2, level: 2, equipment: 'dumbbells',
+    cues: ['Hold the weight at your chest', 'Elbows inside the knees at the bottom', 'Chest proud on the way up'],
+    anim: {
+      ...loop('side', 'rFoot', { ...sym(20, 130) },
+        { torso: 30, head: -15, ...sym(60, 120), ...legs(115, 105, -22) }),
+      props: 'dumbbells',
+    },
+  },
+  {
+    id: 'db-lunge', name: 'Reverse lunge', cat: 'strength', position: 'standing', focus: ['lower'],
+    kind: 'reps', reps: 8, tempo: 3.6, sided: true, level: 2, equipment: 'dumbbells',
+    cues: ['Step back, drop the back knee', 'Front shin stays vertical', 'Push through the front heel to return'],
+    anim: {
+      ...loop('side', 'rFoot', { ...sym(2) },
+        { rHip: 90, rKnee: 90, lHip: -20, lKnee: 60, ...sym(2) }),
+      props: 'dumbbells',
+    },
+  },
+  {
+    id: 'calf-raises', name: 'Calf raises', cat: 'strength', position: 'standing', focus: ['lower'],
+    kind: 'reps', reps: 15, tempo: 2, level: 1,
+    cues: ['Rise onto the balls of the feet', 'Pause at the top', 'Lower slowly'],
+    anim: loop('side', 'rFoot', sym(4), { ...sym(4), lAnk: 38, rAnk: 38 }),
+  },
+  {
+    id: 'good-morning', name: 'Good morning', cat: 'strength', position: 'standing', focus: ['spine', 'lower'],
+    kind: 'reps', reps: 10, tempo: 3.5, level: 1,
+    cues: ['Hands lightly behind the head', 'Hinge at the hips, back flat', 'Squeeze the glutes to stand'],
+    anim: loop('side', 'rFoot', sym(160, 150), { torso: 70, head: -10, ...sym(160, 150), ...legs(75, 15, -10) }),
+  },
+  {
+    id: 'inchworm', name: 'Inchworm', cat: 'warmup', position: 'standing', focus: ['full', 'lower'],
+    kind: 'reps', reps: 4, tempo: 8, level: 2,
+    cues: ['Fold and plant the hands', 'Walk them out to a plank', 'Walk back and roll up'],
+    anim: {
+      ...loop('side', 'rFoot', sym(5),
+        { torso: 130, spine: 25, head: 10, ...sym(155, 10), ...legs(130, 8) },
+        PLANK,
+        { torso: 130, spine: 25, head: 10, ...sym(155, 10), ...legs(130, 8) }),
+      beats: [1, 1.2, 1, 1.2],
+    },
+  },
+  {
+    id: 'reverse-table', name: 'Reverse tabletop', cat: 'strength', position: 'seated', focus: ['upper', 'lower'],
+    kind: 'reps', reps: 10, tempo: 3, level: 2,
+    cues: ['Hands behind you, fingers forward', 'Lift the hips level with the knees', 'Gaze up, neck long'],
+    anim: loop('side', 'rFoot',
+      { torso: -25, ...sym(-30), ...legs(70, 100, 0) },
+      { torso: -90, head: -10, ...sym(-90), ...legs(0, 90, 0) }),
+  },
+
+  // ----------------------------------------------------------------- more pilates / core
+  {
+    id: 'side-leg-lift', name: 'Side-lying leg lift', cat: 'pilates', position: 'supine', focus: ['lower'],
+    kind: 'reps', reps: 10, tempo: 3, sided: true, level: 1,
+    cues: ['Stack hips and shoulders', 'Lift the top leg, toes forward', 'Lower with control'],
+    anim: loop('front', 'pelvis',
+      { torso: -90, rSh: 180, lSh: 0 },
+      { torso: -90, rSh: 180, lSh: 0, lHip: 38 }),
+  },
+  {
+    id: 'swimming', name: 'Swimming', cat: 'pilates', position: 'prone', focus: ['spine', 'core'],
+    kind: 'time', secs: 30, tempo: 1.2, level: 2,
+    cues: ['Lift chest, arms and legs', 'Flutter opposite arm and leg', 'Keep breathing, neck long'],
+    anim: loop('side', 'pelvis',
+      { ...PRONE, spine: -12, rSh: 190, lSh: 165, lHip: -14, rHip: -4 },
+      { ...PRONE, spine: -12, lSh: 190, rSh: 165, rHip: -14, lHip: -4 }),
+  },
+  {
+    id: 'teaser', name: 'Teaser', cat: 'pilates', position: 'supine', focus: ['core'],
+    kind: 'reps', reps: 5, tempo: 6, level: 3,
+    cues: ['Roll up into a V', 'Arms reach parallel to the legs', 'Roll down one vertebra at a time'],
+    anim: loop('side', 'pelvis',
+      { ...SUPINE, ...sym(180), lAnk: 30, rAnk: 30 },
+      { torso: -40, spine: 10, head: 5, ...sym(100), ...legs(95, 0, 30) }),
+  },
+  {
+    id: 'toe-taps', name: 'Toe taps', cat: 'pilates', position: 'supine', focus: ['core'],
+    kind: 'reps', reps: 10, tempo: 3, level: 1,
+    cues: ['Legs in tabletop', 'Lower one foot to tap the floor', 'Back stays heavy'],
+    anim: loop('side', 'pelvis',
+      { ...SUPINE, ...legs(90, 90) },
+      { ...SUPINE, lHip: 90, lKnee: 90, rHip: 30, rKnee: 95 },
+      { ...SUPINE, ...legs(90, 90) },
+      { ...SUPINE, rHip: 90, rKnee: 90, lHip: 30, lKnee: 95 }),
+  },
+
+  // ----------------------------------------------------------------- more yoga / stretch
+  {
+    id: 'sphinx', name: 'Sphinx', cat: 'yoga', position: 'prone', focus: ['spine'],
+    kind: 'time', secs: 30, tempo: 3, level: 1,
+    cues: ['Elbows under shoulders', 'Draw the chest forward and up', 'Relax the glutes'],
+    anim: hold('side', 'pelvis',
+      PRONE,
+      { torso: 90, spine: -25, head: -10, lSh: 65, rSh: 65, lEl: 90, rEl: 90, lAnk: 90, rAnk: 90 }),
+  },
+  {
+    id: 'puppy', name: 'Puppy pose', cat: 'yoga', position: 'kneeling', focus: ['upper', 'spine'],
+    kind: 'time', secs: 30, tempo: 4, level: 1,
+    cues: ['Hips stay over the knees', 'Walk the hands forward', 'Melt the chest toward the floor'],
+    anim: hold('side', 'rKnee', QUAD,
+      { torso: 118, spine: 18, head: 0, ...sym(212), lWr: 0, rWr: 0, ...legs(118, 90, 90) }),
+  },
+  {
+    id: 'happy-baby', name: 'Happy baby', cat: 'stretch', position: 'supine', focus: ['lower', 'spine'],
+    kind: 'time', secs: 30, tempo: 3, level: 1,
+    cues: ['Knees wide toward the armpits', 'Hold the outer feet', 'Rock gently side to side'],
+    anim: hold('side', 'pelvis', HOOK, { ...SUPINE, ...sym(70), ...legs(135, 45, 0) }),
   },
 
   // ----------------------------------------------------------------- rest
