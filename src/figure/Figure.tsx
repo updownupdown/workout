@@ -183,7 +183,7 @@ function Band({ rig, band, view }: { rig: Rig; band: NonNullable<Anim['band']>; 
   )
 }
 
-export function Figure({ anim, t, tempo, flip, accent = '#ff8a65', ghost, floor = true, className, title, work }: Props) {
+export function Figure({ anim, t, tempo, flip, accent = '#ff7a4d', ghost, floor = true, className, title, work }: Props) {
   const c = compile(anim)
   const pose: Pose = poseAt(c, t, tempo)
   const rig = place(solve(pose, anim.view), anim.anchor)

@@ -70,7 +70,7 @@ function setLimb(l: { cyl: THREE.Mesh; a: THREE.Mesh; b: THREE.Mesh }, a: THREE.
   l.b.scale.setScalar(r)
 }
 
-export default function Figure3D({ anim, t, tempo, flip, accent = '#ff8a65', work, className }: Props) {
+export default function Figure3D({ anim, t, tempo, flip, accent = '#ff7a4d', work, className }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const ref = useRef<Scene | null>(null)
 
