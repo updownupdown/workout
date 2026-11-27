@@ -102,6 +102,7 @@ export function App() {
         sound={settings.chimes}
         onSound={(v) => setSettings({ ...settings, chimes: v })}
         view3d={settings.view3d}
+        figure3d={settings.figure3d}
         onExit={() => setScreen('preview')}
         onDone={() => setScreen('done')}
       />

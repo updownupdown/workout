@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useReducer, useRef } from 'react'
 import { Pause, Play, SkipBack, SkipForward, Volume2, VolumeX, X, ArrowLeftRight, Repeat } from 'lucide-react'
-import { breathCycleSecs, readyOf, Session } from '../engine/generator'
+import { breathCycleSecs, Figure3DKind, readyOf, Session } from '../engine/generator'
 import { CAT_ICON } from '../ui/icons'
 import { Figure } from '../figure/Figure'
 import { BreathPhase, CAT_META } from '../data/moves'
@@ -8,6 +8,7 @@ import { chime, keepAwake, unlockAudio } from '../engine/cues'
 import { workOf } from '../data/muscles'
 
 const Figure3D = lazy(() => import('../figure/Figure3D'))
+const FigureReal = lazy(() => import('../figure/FigureReal'))
 import { fmtClock, stepLabel } from './format'
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
   sound: boolean
   onSound: (v: boolean) => void
   view3d: boolean
+  figure3d: Figure3DKind
   onExit: () => void
   onDone: () => void
 }
@@ -53,7 +55,7 @@ export function breathAt(pattern: BreathPhase[], t: number) {
 
 const PHASE_WORD = { in: 'Breathe in', hold: 'Hold', out: 'Breathe out' }
 
-export function Player({ session, sound, onSound, view3d, onExit, onDone }: Props) {
+export function Player({ session, sound, onSound, view3d, figure3d, onExit, onDone }: Props) {
   const steps = session.steps
   const TRANSITION = readyOf(session.settings)
   const clock = useRef<Clock>({ i: 0, phase: 'ready', t: 0, paused: false, fired: new Set() })
@@ -153,6 +155,13 @@ export function Player({ session, sound, onSound, view3d, onExit, onDone }: Prop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Dragging to orbit a 3D figure must not count as a tap-to-pause.
+  const down = useRef<{ x: number; y: number } | null>(null)
+  const onStageClick = (e: React.MouseEvent) => {
+    const d = down.current
+    if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return
+    togglePause()
+  }
   const togglePause = () => {
     unlockAudio()
     clock.current.paused = !clock.current.paused
@@ -223,38 +232,61 @@ export function Player({ session, sound, onSound, view3d, onExit, onDone }: Prop
         </button>
       </header>
 
-      <section className="stage" onClick={togglePause}>
+      <section
+        className="stage"
+        onPointerDown={(e) => (down.current = { x: e.clientX, y: e.clientY })}
+        onClick={onStageClick}
+      >
         {m.kind === 'breath' && (
           <div
             className={`orb ${breath?.phase.kind ?? ''}`}
             style={{ transform: `translate(-50%, -50%) scale(${0.55 + (breath?.level ?? 0) * 0.45})` }}
           />
         )}
-        {view3d ? (
-          <Suspense fallback={null}>
-            <Figure3D
+        {(() => {
+          const tempo = m.kind === 'breath' ? 2 : m.tempo
+          const flat = (
+            <Figure
               anim={m.anim}
               t={figT}
-              tempo={m.kind === 'breath' ? 2 : m.tempo}
+              tempo={tempo}
               flip={st.side === 'left'}
               accent={meta.color}
+              ghost={c.phase === 'ready'}
               work={workOf(m)}
-              className="stage-fig stage-3d"
+              className="stage-fig pulse"
+              title={m.name}
             />
-          </Suspense>
-        ) : (
-          <Figure
-            anim={m.anim}
-            t={figT}
-            tempo={m.kind === 'breath' ? 2 : m.tempo}
-            flip={st.side === 'left'}
-            accent={meta.color}
-            ghost={c.phase === 'ready'}
-            work={workOf(m)}
-            className="stage-fig pulse"
-            title={m.name}
-          />
-        )}
+          )
+          if (!view3d) return flat
+          if (figure3d === 'mannequin')
+            return (
+              <Suspense fallback={null}>
+                <Figure3D
+                  anim={m.anim}
+                  t={figT}
+                  tempo={tempo}
+                  flip={st.side === 'left'}
+                  accent={meta.color}
+                  work={workOf(m)}
+                  className="stage-fig stage-3d"
+                />
+              </Suspense>
+            )
+          return (
+            <Suspense fallback={flat}>
+              <FigureReal
+                anim={m.anim}
+                t={figT}
+                tempo={tempo}
+                flip={st.side === 'left'}
+                character={figure3d}
+                className="stage-fig stage-3d"
+                fallback={flat}
+              />
+            </Suspense>
+          )
+        })()}
         {c.phase === 'ready' && (
           <div className="ready">
             <span>Get ready</span>

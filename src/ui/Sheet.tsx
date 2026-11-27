@@ -1,7 +1,9 @@
 import { ReactNode, useEffect } from 'react'
 import { X } from 'lucide-react'
 
-export function Sheet({ onClose, children, title }: { onClose: () => void; children: ReactNode; title?: string }) {
+export function Sheet({
+  onClose, children, title, className = '',
+}: { onClose: () => void; children: ReactNode; title?: string; className?: string }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
@@ -9,7 +11,7 @@ export function Sheet({ onClose, children, title }: { onClose: () => void; child
   }, [onClose])
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+      <div className={`sheet ${className}`} role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="sheet-grab" />
         {title && (
           <header className="sheet-head">

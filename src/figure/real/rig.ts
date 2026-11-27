@@ -9,8 +9,10 @@ import {
   Rig,
   solve,
   View,
-} from '../figure/skeleton'
-import { Anim, compile, Compiled, poseAt } from '../figure/anim'
+  PoseInput,
+} from '../skeleton'
+import { Anim, compile, Compiled, poseAt } from '../anim'
+import { boneDQs, BoneDQ, dqsVertex } from './dqs'
 
 /**
  * Drives a rigged, skinned human (3ds Max Biped skeleton, as used by the
@@ -39,6 +41,47 @@ const ORDER: Seg[] = [
   'L_UpperArm', 'L_Forearm', 'L_Hand', 'R_UpperArm', 'R_Forearm', 'R_Hand',
   'L_Thigh', 'L_Calf', 'L_Foot', 'R_Thigh', 'R_Calf', 'R_Foot',
 ]
+const TORSO: Seg[] = ['Pelvis', 'Spine', 'Spine1', 'Spine2', 'Neck', 'Head']
+const LEGS: Seg[] = ['L_Thigh', 'L_Calf', 'L_Foot', 'R_Thigh', 'R_Calf', 'R_Foot']
+
+const smooth = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+}
+
+// ---------------------------------------------------------------- mirroring
+const PAIRS: [keyof Pose, keyof Pose][] = [
+  ['lSh', 'rSh'], ['lEl', 'rEl'], ['lWr', 'rWr'], ['lHip', 'rHip'], ['lKnee', 'rKnee'], ['lAnk', 'rAnk'],
+]
+const swapLR = <T extends string>(n: T): T =>
+  (n[0] === 'l' && n[1] === n[1].toUpperCase() ? 'r' + n.slice(1) : n[0] === 'r' && n[1] === n[1].toUpperCase() ? 'l' + n.slice(1) : n) as T
+
+function mirrorFrame(f: PoseInput, view: View): PoseInput {
+  const o: PoseInput = { ...f }
+  for (const [a, b] of PAIRS) {
+    delete o[a]
+    delete o[b]
+    if (f[b] !== undefined) o[a] = f[b]
+    if (f[a] !== undefined) o[b] = f[a]
+  }
+  if (view === 'front') for (const k of ['torso', 'spine', 'head', 'rot'] as const) if (f[k] !== undefined) o[k] = -f[k]!
+  return o
+}
+
+const mirrored = new WeakMap<Anim, Anim>()
+/** The same move done on the other side. */
+export function mirrorAnim(a: Anim): Anim {
+  const hit = mirrored.get(a)
+  if (hit) return hit
+  const m: Anim = {
+    ...a,
+    anchor: swapLR(a.anchor),
+    frames: a.frames.map((f) => mirrorFrame(f, a.view)),
+    contacts: a.contacts?.map((c) => c?.map(swapLR)),
+  }
+  mirrored.set(a, m)
+  return m
+}
 
 const TAU = Math.PI * 2
 const wrap = (a: number) => {
@@ -83,6 +126,8 @@ const ANCHOR_BONE: Record<AnchorName, string> = {
 const Z = new THREE.Vector3(0, 0, 1)
 const _q = new THREE.Quaternion()
 const _p = new THREE.Quaternion()
+const _q2 = new THREE.Quaternion()
+const _p2 = new THREE.Quaternion()
 const _v = new THREE.Vector3()
 const _w = new THREE.Vector3()
 
@@ -91,6 +136,8 @@ interface ViewState {
   yaw: number
   neutral: Map<Seg, THREE.Quaternion>
   theta0: Record<Seg, number>
+  /** Hand direction and palm normal (world) in the neutral stance. */
+  hand: Record<'L' | 'R', { d: THREE.Vector3; p: THREE.Vector3 }>
 }
 
 export class Driver {
@@ -105,6 +152,7 @@ export class Driver {
   private views = new Map<View, ViewState>()
   private cur: ViewState | null = null
   private compiled = new WeakMap<Anim, Compiled>()
+  private dq: BoneDQ[] = []
   /** Height of the surface the figure stands on. */
   floorY = 0
 
@@ -214,7 +262,19 @@ export class Driver {
     this.root.updateMatrixWorld(true)
     const neutral = new Map<Seg, THREE.Quaternion>()
     for (const s of ORDER) neutral.set(s, this.bone(s).getWorldQuaternion(new THREE.Quaternion()))
-    const st: ViewState = { view, yaw, neutral, theta0: segAngles(solve(NEUTRAL, view)) }
+    const hand = {} as ViewState['hand']
+    for (const S of ['L', 'R'] as const) {
+      const h = this.bone(`${S}_Hand`).getWorldPosition(new THREE.Vector3())
+      const mid = this.bone(`${S}_Finger2`).getWorldPosition(new THREE.Vector3())
+      const thumb = this.bone(`${S}_Finger0`).getWorldPosition(new THREE.Vector3())
+      const d = mid.sub(h).normalize()
+      const t = thumb.sub(h)
+      t.addScaledVector(d, -t.dot(d)).normalize()
+      // palm faces the body: thumb × fingers on the right hand, mirrored on the left
+      const p = S === 'R' ? t.clone().cross(d) : d.clone().cross(t)
+      hand[S] = { d, p: p.normalize() }
+    }
+    const st: ViewState = { view, yaw, neutral, theta0: segAngles(solve(NEUTRAL, view)), hand }
     // remember the lowered-arm locals as the new rest for unposed children (hands, fingers)
     this.views.set(view, st)
     return st
@@ -236,16 +296,82 @@ export class Driver {
     this.root.position.set(0, 0, 0)
     this.root.updateMatrixWorld(true)
     const th = segAngles(solve(p, view))
-    for (const s of ORDER) {
-      const d = wrap(th[s] - st.theta0[s])
-      _q.setFromAxisAngle(Z, -d).multiply(st.neutral.get(s)!)
+    // Deep hip flexion (child's pose, down dog, squats): tip the pelvis toward
+    // the thighs, as a real pelvis does, so the hip skin is not folded 150°.
+    if (view === 'side') {
+      const hip = (p.lHip + p.rHip) / 2
+      th.Pelvis -= ((Math.max(0, hip - 80) * 0.35) * Math.PI) / 180
+    }
+    const turn = (s: Seg) => _q.setFromAxisAngle(Z, -wrap(th[s] - st.theta0[s]))
+    const plane = (s: Seg) => {
+      turn(s).multiply(st.neutral.get(s)!)
       this.setWorldQuat(this.bone(s), _q)
     }
+    TORSO.forEach(plane)
+
+    // Shoulders: lift the collarbones as the arms go overhead (scapulohumeral
+    // rhythm). Moves the shoulder joint up so the skin doesn't fold.
+    const spine2 = this.bone('Spine2').getWorldPosition(new THREE.Vector3())
+    const bodyUp = this.bone('Neck').getWorldPosition(new THREE.Vector3()).sub(spine2).normalize()
+    for (const S of ['L', 'R'] as const) {
+      const sh = S === 'L' ? p.lSh : p.rSh
+      const lift = smooth(70, 175, sh) * 0.12
+      if (lift <= 0) continue
+      const clav = this.bone(`${S}_Clavicle`)
+      const a = clav.getWorldPosition(new THREE.Vector3())
+      const d = this.bone(`${S}_UpperArm`).getWorldPosition(new THREE.Vector3()).sub(a).normalize()
+      const axis = d.cross(bodyUp).normalize()
+      _q2.setFromAxisAngle(axis, lift).multiply(clav.getWorldQuaternion(_p2))
+      this.setWorldQuat(clav, _q2)
+    }
+
+    for (const S of ['L', 'R'] as const) {
+      plane(`${S}_UpperArm`)
+      plane(`${S}_Forearm`)
+      this.poseHand(S, S === 'L' ? p.lWr : p.rWr, turn(`${S}_Hand`).clone(), st)
+    }
+    LEGS.forEach(plane)
+    this.skin()
+  }
+
+  /**
+   * Hands: the 2D data only says how far the wrist bends. A hand that bends a
+   * lot (flat on the floor, push-up, down dog) must turn palm-down, which in a
+   * real arm comes from forearm rotation. Blend from the neutral palm-in hand
+   * toward palm-facing-the-push as the wrist bends, splitting the twist
+   * between forearm and wrist so neither skin region wrings.
+   */
+  private poseHand(S: 'L' | 'R', wr: number, qPlane: THREE.Quaternion, st: ViewState) {
+    const fore = this.bone(`${S}_Forearm`)
+    const hand = this.bone(`${S}_Hand`)
+    const h = st.hand[S].d.clone().applyQuaternion(qPlane)
+    const pPlane = st.hand[S].p.clone().applyQuaternion(qPlane)
+    const f = hand.getWorldPosition(new THREE.Vector3()).sub(fore.getWorldPosition(new THREE.Vector3())).normalize()
+    const pPush = f.clone().addScaledVector(h, -f.dot(h))
+    const s = pPush.length() > 0.05 ? smooth(15, 70, Math.abs(wr)) : 0
+    let phi = 0
+    if (s > 0) {
+      pPush.normalize()
+      const p1 = pPlane.clone().multiplyScalar(1 - s).addScaledVector(pPush, s)
+      p1.addScaledVector(h, -p1.dot(h)).normalize()
+      phi = Math.atan2(new THREE.Vector3().crossVectors(pPlane, p1).dot(h), pPlane.dot(p1))
+    }
+    if (phi !== 0) {
+      _q2.setFromAxisAngle(f, phi * 0.5).multiply(fore.getWorldQuaternion(_p2))
+      this.setWorldQuat(fore, _q2)
+    }
+    _q2.setFromAxisAngle(h, phi).multiply(qPlane).multiply(st.neutral.get(`${S}_Hand`)!)
+    this.setWorldQuat(hand, _q2)
+  }
+
+  /** Refresh the per-bone dual quaternions after posing. */
+  private skin() {
+    this.root.updateMatrixWorld(true)
+    this.meshes.forEach((m, i) => (this.dq[i] = boneDQs(m, this.dq[i])))
   }
 
   private vtx(mi: number, i: number, out: THREE.Vector3) {
-    const m = this.meshes[mi]
-    return m.getVertexPosition(i, out).applyMatrix4(m.matrixWorld)
+    return dqsVertex(this.meshes[mi], this.dq[mi], i, out)
   }
 
   private minY(ids: [number, number][]) {
@@ -304,24 +430,25 @@ export class Driver {
   }
 
   /** Pose at time t, grounded on the floor and pinned at the move's anchor. */
-  update(anim: Anim, t: number, tempo: number) {
+  update(anim: Anim, t: number, tempo: number, flip = false) {
+    if (flip) anim = mirrorAnim(anim)
     const c = this.compile(anim)
     const p = poseAt(c, t, tempo)
     this.pose(p, anim.view)
     const low = this.lowest()
     const a = this.bone(ANCHOR_BONE[anim.anchor]).getWorldPosition(_v)
-    this.root.position.set(-a.x, this.floorY - low, anim.view === 'side' ? 0 : -a.z * 0)
-    this.root.updateMatrixWorld(true)
+    this.root.position.set(-a.x, this.floorY - low, 0)
+    this.skin()
     return p
   }
 
   /** World-space bounds of the figure across one cycle of a move. */
-  bounds(anim: Anim, tempo: number) {
+  bounds(anim: Anim, tempo: number, flip = false) {
     const box = new THREE.Box3()
     const n = anim.mode === 'loop' ? 10 : 4
     for (let i = 0; i <= n; i++) {
       const t = anim.mode === 'loop' ? (i / n) * tempo : (i / n) * tempo * 1.2
-      this.update(anim, t, tempo)
+      this.update(anim, t, tempo, flip)
       for (const [mi, k] of this.sample) box.expandByPoint(this.vtx(mi, k, _w))
     }
     return box
