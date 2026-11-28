@@ -22,7 +22,11 @@ No per-bone axis conventions and no twist singularities. Then, per keyframe with
 The 2D keyframes are only a starting point. Three layers turn them into poses a real body could hold:
 
 1. **3D extras in the pose data** (`Pose` in `figure/skeleton.ts`): `lShX/rShX`, `lHipX/rHipX` (limb out of the move's plane), `lShTw/rShTw`, `lHipTw/rHipTw` (twist), `twist` and `headTw` (upper body / head turn), `tilt` (whole-body lean out of plane) and `bendX` (trunk bend out of plane).
-2. **Hand corrections** in `src/data/poses3d.ts` for things the 2D drawing faked: cross-legged sitting, hugs and crossed arms in front view, hands behind the head, arms resting on the floor when lying down, child's pose and pigeon. It can also add floor contacts (`touch`) and hand targets (`reach`, e.g. hands on knees).
+2. **Hand corrections** in `src/data/poses3d.ts` for things the 2D drawing faked: cross-legged sitting, butterfly, hugs and crossed arms in front view, hands behind the head or on the hips, the top of an upright row, arms resting on the floor when lying down, child's pose and pigeon. It can also add floor contacts (`touch`) and targets (`reach`: a hand, or with `from` any bone, kept a set distance from a bone, e.g. hands on knees, soles together).
+
+   The limb values for the harder shapes (cross-legged, butterfly, hug, upright row, hands on hips) were fitted numerically to elbow/wrist or knee/ankle target positions on both bodies rather than guessed.
+
+   In front view the rig also turns a bent leg out at the hip so the kneecap faces away from the shin and the foot follows the knee (warrior II, goddess, tree). A knee only hinges one way, so a knee bent in the frontal plane with the toes still facing the camera is not possible.
 3. **Settle on the real mesh** (`figure/real/physics.ts`). For every keyframe a coordinate-descent optimiser minimises
    - floating floor contacts (declared parts must touch the floor),
    - balance: the centre of mass (Winter segment masses over the skinned vertices) must sit at least 2.5 cm inside the support polygon of the parts touching the floor,
@@ -30,13 +34,19 @@ The 2D keyframes are only a starting point. Three layers turn them into poses a 
    - joint limits,
    - and the distance from the authored angles, so the move keeps its shape.
 
-   Search directions include coupled moves that keep the feet flat (lean from the ankles, hips back, squat) and shift weight sideways over one foot. Results are baked per body into `src/data/settled3d.ts`:
+   Search directions include coupled moves that keep the feet flat (lean from the ankles, hips back, squat), the same move on both legs at once, and a sideways weight shift over one foot. Limb twists are free parameters too.
+
+   Each keyframe is solved from two starts: as authored, and with the whole body's orientation held first so the limbs adapt before the body may roll. Rolling the whole body is cheap and otherwise wins too early (in hook-lying it lifted the hips off the floor instead of moving the feet). The better of the two is kept.
+
+   Results are baked per body into `src/data/settled3d.ts`:
 
    ```
    npx vite --port 5173 &
-   node scripts/realistic/bake-poses.cjs            # every move, both bodies (~10 min each)
+   node scripts/realistic/bake-poses.cjs            # every move, both bodies (~40 min each)
    node scripts/realistic/bake-poses.cjs squat,plank # just these
    ```
+
+   The file is rewritten after every move, so an interrupted run keeps its progress. To bake both bodies in parallel, give each run its own part file and merge (see the header of the script).
 
    The script prints the energy before and after, the balance margin, clip and float counts per keyframe.
 

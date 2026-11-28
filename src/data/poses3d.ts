@@ -23,8 +23,20 @@ export interface Fix3D {
 }
 
 // ---------------------------------------------------------------- building blocks
-/** Cross-legged seat, figure facing the viewer: thighs forward and out, shins crossed. */
-const CROSS_LEGGED: PoseInput = { lHip: 55, rHip: 55, lHipX: 75, rHipX: 75, lKnee: 150, rKnee: 150, lAnk: 0, rAnk: 0 }
+/**
+ * Cross-legged seat, figure facing the viewer: thighs forward and out and
+ * turned out at the hip (kneecaps up), shins crossed with the right one in
+ * front. Fitted to knee and ankle targets on both bodies.
+ */
+const CROSS_LEGGED: PoseInput = {
+  rHip: 73, rHipX: 48, rHipTw: 83, rKnee: 119, rAnk: 10,
+  lHip: 73, lHipX: 47, lHipTw: 78, lKnee: 130, lAnk: 10,
+}
+/** Soles together, knees out (butterfly), from knees up to knees low. */
+const SOLES_TOGETHER: PoseInput[] = [
+  { lHip: 87, rHip: 87, lHipX: 46, rHipX: 46, lHipTw: 85, rHipTw: 85, lKnee: 141, rKnee: 141, lAnk: 10, rAnk: 10 },
+  { lHip: 78, rHip: 78, lHipX: 38, rHipX: 38, lHipTw: 84, rHipTw: 84, lKnee: 143, rKnee: 143, lAnk: 10, rAnk: 10 },
+]
 /** Hands resting on the knees while sitting cross-legged. */
 const HANDS_ON_KNEES: PoseInput = { lSh: 12, rSh: 12, lShX: 48, rShX: 48, lEl: 22, rEl: 22, lShTw: -50, rShTw: -50 }
 /** Hands clasped in front of the chest (front view). */
@@ -33,6 +45,12 @@ const PRAYER: PoseInput = { lSh: 15, rSh: 15, lShX: 50, rShX: 50, lEl: 100, rEl:
 const HANDS_BEHIND_HEAD: PoseInput = { lSh: 170, rSh: 170, lShX: 55, rShX: 55, lEl: 140, rEl: 140 }
 /** Lying on the back, arms resting on the floor by the sides. */
 const ARMS_DOWN: PoseInput = { lSh: -8, rSh: -8, lShX: 18, rShX: 18, lEl: 0, rEl: 0 }
+/** Hands on the hips, elbows out and back (side view). Fitted to elbow and wrist targets. */
+const HANDS_ON_HIPS: PoseInput = { lSh: -4.5, rSh: -4.5, lShX: 18, rShX: 18, lShTw: -65, rShTw: -65, lEl: 47, rEl: 47 }
+/** Top of an upright row: elbows high and out, hands in front of the chest (front view). */
+const ROW_TOP: PoseInput = { lSh: 88, rSh: 88, lShX: 22, rShX: 22, lShTw: -75, rShTw: -75, lEl: 152, rEl: 152 }
+/** Arms wrapped round the shoulders, left arm on top (front view). */
+const HUG: PoseInput = { lSh: 115, lShX: 107, lShTw: -31, lEl: 113, rSh: 150, rShX: 110, rShTw: -7, rEl: 102 }
 const HANDS: ContactName[] = ['lHand', 'rHand']
 
 const ON_KNEES: Reach[] = [{ hand: 'L', to: 'L_Calf', d: 13 }, { hand: 'R', to: 'R_Calf', d: 13 }]
@@ -40,6 +58,7 @@ const ON_FEET: Reach[] = [{ hand: 'L', to: 'L_Foot', d: 7 }, { hand: 'R', to: 'R
 const ON_SHINS: Reach[] = [{ hand: 'L', to: 'L_Calf', d: 12 }, { hand: 'R', to: 'R_Calf', d: 12 }]
 const ON_HEAD: Reach[] = [{ hand: 'L', to: 'Neck', d: 13 }, { hand: 'R', to: 'Neck', d: 13 }]
 const PALMS: Reach[] = [{ hand: 'L', to: 'R_Hand', d: 6 }]
+const SOLES: Reach = { hand: 'L', from: 'L_Foot', to: 'R_Foot', d: 11 }
 
 const BREATH: Fix3D = {
   frames: [{ ...CROSS_LEGGED, ...HANDS_ON_KNEES }, { ...CROSS_LEGGED, ...HANDS_ON_KNEES, lSh: 14, rSh: 14 }],
@@ -59,17 +78,18 @@ export const FIX3D: Record<string, Fix3D> = {
   'triangle-breath': BREATH,
   'seated-side-bend': { frames: both(CROSS_LEGGED, 2), contacts: [['pelvis'], ['pelvis']] },
   butterfly: {
-    frames: [
-      { lHip: 62, rHip: 62, lHipX: 60, rHipX: 60, lKnee: 150, rKnee: 150, lAnk: 0, rAnk: 0, ...HANDS_ON_KNEES, lShX: 55, rShX: 55, lEl: 40, rEl: 40 },
-      { lHip: 70, rHip: 70, lHipX: 58, rHipX: 58, lKnee: 150, rKnee: 150, lAnk: 0, rAnk: 0, ...HANDS_ON_KNEES, lShX: 55, rShX: 55, lEl: 40, rEl: 40 },
-    ],
-    contacts: [['pelvis'], ['pelvis']],
-    reach: [ON_FEET, ON_FEET],
+    frames: SOLES_TOGETHER.map((legs) => ({ ...legs, ...HANDS_ON_KNEES, lShX: 55, rShX: 55, lEl: 40, rEl: 40 })),
+    // feet rest on their outer edges
+    contacts: [['pelvis', 'lHeel', 'rHeel'], ['pelvis', 'lHeel', 'rHeel']],
+    reach: [[...ON_FEET, SOLES], [...ON_FEET, SOLES]],
   },
   'straddle-side': { frames: both({ lHip: 50, rHip: 50, lHipX: 45, rHipX: 45 }, 2), contacts: [['pelvis', 'lHeel', 'rHeel'], ['pelvis', 'lHeel', 'rHeel']] },
 
   // front view: arms in front of the body, not through it
-  'open-hug': { frames: [{ lShX: -15, rShX: -15 }, { lSh: 90, rSh: 90, lShX: 70, rShX: 70, lEl: 40, rEl: 40 }] },
+  'open-hug': {
+    frames: [{ lShX: -15, rShX: -15 }, HUG],
+    reach: [null, [{ hand: 'L', to: 'R_UpperArm', d: 8 }, { hand: 'R', to: 'L_UpperArm', d: 10 }]],
+  },
   'band-pull-apart': { frames: [{ lSh: 90, rSh: 90, lShX: 85, rShX: 85, lEl: 0, rEl: 0 }, { lShX: -5, rShX: -5 }] },
   'sumo-squat': { frames: both(PRAYER, 2), reach: both(PALMS, 2) },
   'lateral-lunge': { frames: both(PRAYER, 2), reach: both(PALMS, 2) },
@@ -82,7 +102,8 @@ export const FIX3D: Record<string, Fix3D> = {
     frames: [null, { rSh: 172, rEl: 150, rShTw: 90, lSh: 160, lEl: 90, lShTw: 90 }],
     reach: [null, [{ hand: 'L', to: 'R_Forearm', d: 6 }]],
   },
-  'db-upright-row': { frames: [null, { lShX: 20, rShX: 20, lShTw: -90, rShTw: -90 }] },
+  'db-upright-row': { frames: [null, ROW_TOP] },
+  'hip-hinge': { frames: both(HANDS_ON_HIPS, 2) },
   'happy-baby': { frames: [ARMS_DOWN, null], touch: [HANDS, null], reach: [null, ON_FEET] },
   'rolling-ball': { reach: both(ON_SHINS, 2) },
   dancer: { reach: [null, [{ hand: 'R', to: 'R_Foot', d: 7 }]] },
@@ -101,7 +122,15 @@ export const FIX3D: Record<string, Fix3D> = {
   'shoulder-bridge': { touch: hands(2) },
   'bridge-march': { touch: hands(2) },
   'knees-chest': { frames: [ARMS_DOWN, null], touch: [HANDS, null] },
-  'figure-four': { frames: [ARMS_DOWN, null], touch: [HANDS, null] },
+  // right ankle rests on the left knee; hands draw the left thigh in
+  'figure-four': {
+    frames: [ARMS_DOWN, { rHipTw: 45, lSh: 60, rSh: 60, lEl: 40, rEl: 40 }],
+    touch: [HANDS, null],
+    reach: [null, [
+      { hand: 'L', to: 'L_Thigh', d: 30 }, { hand: 'R', to: 'L_Thigh', d: 30 },
+      { hand: 'R', from: 'R_Foot', to: 'L_Calf', d: 9 },
+    ]],
+  },
   'legs-up': { frames: [ARMS_DOWN, ARMS_DOWN], touch: hands(2) },
   'leg-lifts': { frames: both(ARMS_DOWN, 2), touch: hands(2) },
   'flutter-kicks': { frames: both(ARMS_DOWN, 2), touch: hands(2) },
