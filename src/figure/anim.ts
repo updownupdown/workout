@@ -48,6 +48,8 @@ export interface Anim {
 /** A hand kept at a set distance (cm) from a bone, e.g. resting on a knee. */
 export interface Reach {
   hand: 'L' | 'R'
+  /** Another bone to bring to `to` instead of the hand (feet sole to sole). */
+  from?: string
   to: string
   d: number
 }

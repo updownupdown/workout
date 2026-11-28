@@ -66,6 +66,8 @@ const ALLOWED = new Set([
   'L.upperArm|chest', 'R.upperArm|chest', 'L.thigh|abdomen', 'R.thigh|abdomen',
   // thighs rest on each other and on the belly in deep folds; hands may hold anything
   'L.thigh|R.thigh',
+  // arms overhead or hands behind the head: upper arms and forearms lie against the head
+  'L.upperArm|head', 'R.upperArm|head', 'L.forearm|head', 'R.forearm|head',
 ])
 const pairKey = (a: string, b: string) => (ALLOWED.has(`${a}|${b}`) || ALLOWED.has(`${b}|${a}`))
 
@@ -96,7 +98,9 @@ const LIMITS: Partial<Record<keyof Pose, [number, number]>> = {
   lWr: [-90, 100], rWr: [-90, 100], lAnk: [-40, 95], rAnk: [-40, 95],
   lSh: [-95, 192], rSh: [-95, 192], lHip: [-50, 165], rHip: [-50, 165],
   lShX: [-45, 110], rShX: [-45, 110], lHipX: [-30, 75], rHipX: [-30, 75],
-  lShTw: [-90, 90], rShTw: [-90, 90], lHipTw: [-45, 60], rHipTw: [-45, 60],
+  lShTw: [-90, 90], rShTw: [-90, 90], // the twist turns the whole posed leg about the thigh, so a cross-legged
+  // seat (abducted, flexed, turned out) needs more than the anatomical range
+  lHipTw: [-90, 90], rHipTw: [-90, 90],
   twist: [-60, 60], headTw: [-70, 70], tilt: [-20, 20], bendX: [-45, 45],
 }
 
@@ -105,7 +109,7 @@ export function limitErrors(p: Pose) {
   for (const [k, [lo, hi]] of Object.entries(LIMITS) as [keyof Pose, [number, number]][]) {
     let v = p[k]
     // arm circles go all the way round
-    if (k === 'lSh' || k === 'rSh') v = ((((v + 170) % 360) + 360) % 360) - 170
+    if (k === 'lSh' || k === 'rSh') v = ((((v + 120) % 360) + 360) % 360) - 120
     if (v < lo) out.push({ k, over: lo - v })
     else if (v > hi) out.push({ k, over: v - hi })
   }
@@ -255,6 +259,9 @@ export class Physics {
     return out.multiplyScalar(1 / m)
   }
 
+  /** Hand capsules with a reach target in the current settle (`L.hand`, `R.hand`). */
+  holding = new Set<string>()
+
   clips(): Clip[] {
     const d = this.d
     const seg = this.caps.map((c) => {
@@ -268,6 +275,8 @@ export class Physics {
       for (let j = i + 1; j < seg.length; j++) {
         const A = seg[i], B = seg[j]
         if (pairKey(A.c.name, B.c.name)) continue
+        // a hand holding on to something is meant to touch it
+        if (this.holding.has(A.c.name) || this.holding.has(B.c.name)) continue
         const depth = A.c.r + B.c.r - segDist(A.a, A.b, B.a, B.b)
         if (depth > CLIP_TOL) out.push({ a: A.c.name, b: B.c.name, depth: depth - CLIP_TOL })
       }
@@ -293,6 +302,7 @@ export class Physics {
   /** How far a hand is from where it should hold on (cm). */
   reachGap(r: Reach) {
     const d = this.d
+    if (r.from) return d.bone(r.from).getWorldPosition(_a).distanceTo(d.bone(r.to).getWorldPosition(_c)) - r.d
     const a = d.bone(`${r.hand}_Hand`).getWorldPosition(_a)
     const b = d.bone(`${r.hand}_Finger2`).getWorldPosition(_b)
     const palm = a.add(b).multiplyScalar(0.5)
@@ -334,6 +344,7 @@ export class Physics {
   settle(pose: Pose, view: View, contacts: ContactName[], opts: { balance?: boolean; reach?: Reach[] } = {}): { pose: Pose; before: number; after: number } {
     const d = this.d
     const balance = opts.balance ?? true
+    this.holding = new Set((opts.reach ?? []).filter((r) => !r.from).map((r) => `${r.hand}.hand`))
     const energy = (p: Pose) => {
       d.pose(p, view)
       const low = d.lowest()
@@ -373,26 +384,49 @@ export class Physics {
     let cur = { ...pose }
     let e = energy(cur)
     const before = e
-    for (const step of [8, 4, 2, 1, 0.5]) {
-      let improved = true
-      let guard = 0
-      while (improved && guard++ < 25) {
-        improved = false
-        for (const dir of dirs) {
-          for (const s of [step, -step]) {
-            const next = { ...cur }
-            for (const [k, w] of dir) next[k] += w * s
-            const ne = energy(next)
-            if (ne < e - 1e-4) {
-              cur = next
-              e = ne
-              improved = true
-              break
+    const GLOBAL = new Set<keyof Pose>(['rot', 'torso', 'tilt'])
+    let held = false
+    const descend = (steps: number[]) => {
+      const use = held ? dirs.filter((d) => !d.some(([k]) => GLOBAL.has(k))) : dirs
+      for (const step of steps) {
+        let improved = true
+        let guard = 0
+        while (improved && guard++ < 25) {
+          improved = false
+          for (const dir of use) {
+            for (const s of [step, -step]) {
+              const next = { ...cur }
+              for (const [k, w] of dir) next[k] += w * s
+              const ne = energy(next)
+              if (ne < e - 1e-4) {
+                cur = next
+                e = ne
+                improved = true
+                break
+              }
             }
           }
         }
       }
     }
+    const solve = (start: Pose) => {
+      cur = { ...start }
+      e = energy(cur)
+      descend([8, 4, 2, 1, 0.5])
+      return { pose: cur, e }
+    }
+    // Two starts: as authored, and with the whole body's orientation held
+    // first so the limbs adapt before the body is allowed to roll (turning the
+    // whole body is cheap and otherwise wins, e.g. lifting the hips off the
+    // floor rather than re-placing the feet).
+    const a = solve(pose)
+    held = true
+    const start = solve(pose).pose
+    held = false
+    const b = solve(start)
+    const win = b.e < a.e ? b : a
+    cur = win.pose
+    e = win.e
     return { pose: cur, before, after: e }
   }
 }
@@ -400,6 +434,7 @@ export class Physics {
 const PARAMS: (keyof Pose)[] = [
   'rot', 'torso', 'spine', 'head', 'lHip', 'rHip', 'lKnee', 'rKnee', 'lAnk', 'rAnk',
   'lSh', 'rSh', 'lEl', 'rEl', 'lWr', 'rWr', 'lShX', 'rShX', 'lHipX', 'rHipX', 'tilt', 'bendX',
+  'lShTw', 'rShTw', 'lHipTw', 'rHipTw',
 ]
 // Cost per degree² of moving away from the authored angle.
 const COST: Partial<Record<keyof Pose, number>> = {
@@ -407,13 +442,14 @@ const COST: Partial<Record<keyof Pose, number>> = {
   lHip: 0.012, rHip: 0.012, lKnee: 0.012, rKnee: 0.012, lAnk: 0.004, rAnk: 0.004,
   lSh: 0.01, rSh: 0.01, lEl: 0.01, rEl: 0.01, lWr: 0.004, rWr: 0.004,
   lShX: 0.01, rShX: 0.01, lHipX: 0.02, rHipX: 0.02, tilt: 0.03, bendX: 0.03,
+  lShTw: 0.01, rShTw: 0.01, lHipTw: 0.015, rHipTw: 0.015,
 }
 
 type Dir = [keyof Pose, number][]
 
 const SIDE_PAIRS: [keyof Pose, keyof Pose][] = [
   ['lSh', 'rSh'], ['lEl', 'rEl'], ['lWr', 'rWr'], ['lHip', 'rHip'], ['lKnee', 'rKnee'], ['lAnk', 'rAnk'],
-  ['lShX', 'rShX'], ['lHipX', 'rHipX'],
+  ['lShX', 'rShX'], ['lHipX', 'rHipX'], ['lShTw', 'rShTw'], ['lHipTw', 'rHipTw'],
 ]
 
 /**
@@ -451,6 +487,12 @@ function directions(view: View): Dir[] {
     // squat-style: knee bends twice as much as the hip, foot flat
     out.push([[`${s}Hip`, 1], [`${s}Knee`, 2], [`${s}Ank`, ankFor(s, 0, 1, 2)]])
   }
+  // the same moves on both legs at once: when both feet hold the lowest point,
+  // moving one leg alone can't lift the body off them
+  const both = (f: (s: 'l' | 'r') => Dir) => [...f('l'), ...f('r')]
+  out.push(both((s) => [[`${s}Knee`, 1], [`${s}Ank`, ankFor(s, 0, 0, 1)]]))
+  out.push(both((s) => [[`${s}Hip`, 1], [`${s}Knee`, 2], [`${s}Ank`, ankFor(s, 0, 1, 2)]]))
+  out.push(both((s) => [[`${s}Hip`, -1], [`${s}Knee`, 1], [`${s}Ank`, ankFor(s, 0, -1, 1)]]))
   // both hips back (hinge) keeping the trunk's angle and feet flat
   out.push([['lHip', 1], ['rHip', 1], ['lAnk', ankFor('l', 0, 1, 0)], ['rAnk', ankFor('r', 0, 1, 0)]])
   // shift the hips over one foot, trunk kept upright

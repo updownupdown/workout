@@ -379,6 +379,7 @@ export class Driver {
     if (p.bendX) this.bendUpper((view === 'side' ? chestFwd : shoulderRight).clone().multiplyScalar(-1), p.bendX)
 
     LEGS.forEach(plane)
+    if (view === 'front') for (const S of ['L', 'R'] as const) this.kneeFacing(S, turn(`${S}_Thigh`).clone(), F0)
     const pelvisFwd = F0.clone().applyQuaternion(turn('Pelvis'))
     const hipRight = this.bone('R_Thigh').getWorldPosition(new THREE.Vector3())
       .sub(this.bone('L_Thigh').getWorldPosition(new THREE.Vector3())).normalize()
@@ -387,6 +388,34 @@ export class Driver {
       this.limbExtra(S, 'leg', p[`${s}HipX`], p[`${s}HipTw`], view === 'side' ? hipRight : pelvisFwd, view)
     }
     this.skin()
+  }
+
+  /**
+   * A knee only hinges one way. In front view the 2D data bends the knee in the
+   * frontal plane (warrior II, goddess, tree), which a real leg does by turning
+   * out at the hip. Turn the thigh about its own axis so the kneecap faces
+   * away from the shin, and the shin and foot with it, so the toes follow the
+   * knee instead of facing the camera.
+   */
+  private kneeFacing(S: 'L' | 'R', thighTurn: THREE.Quaternion, F0: THREE.Vector3) {
+    const hip = this.bone(`${S}_Thigh`).getWorldPosition(new THREE.Vector3())
+    const knee = this.bone(`${S}_Calf`).getWorldPosition(new THREE.Vector3())
+    const ankle = this.bone(`${S}_Foot`).getWorldPosition(new THREE.Vector3())
+    const dt = knee.clone().sub(hip).normalize()
+    const ds = ankle.clone().sub(knee).normalize()
+    const target = ds.clone().addScaledVector(dt, -ds.dot(dt)).multiplyScalar(-1)
+    const w = smooth(0.15, 0.6, target.length())
+    if (w <= 0) return
+    target.normalize()
+    const cap = F0.clone().applyQuaternion(thighTurn)
+    cap.addScaledVector(dt, -cap.dot(dt)).normalize()
+    const phi = Math.atan2(new THREE.Vector3().crossVectors(cap, target).dot(dt), cap.dot(target)) * w
+    const names = [`${S}_Thigh`, `${S}_Calf`, `${S}_Foot`]
+    const qs = names.map((n) => this.bone(n).getWorldQuaternion(new THREE.Quaternion()))
+    names.forEach((n, i) => {
+      const R = new THREE.Quaternion().setFromAxisAngle(i === 0 ? dt : ds, phi)
+      this.setWorldQuat(this.bone(n), R.multiply(qs[i]))
+    })
   }
 
   /**
