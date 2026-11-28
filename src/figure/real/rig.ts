@@ -160,6 +160,10 @@ export class Driver {
   readonly parts = new Map<ContactName, [number, number][]>()
   /** Every n-th vertex, for finding the lowest point fast. */
   readonly sample: [number, number][] = []
+  /** Sampled head vertices, kept apart: hair and scalp give a little against the floor. */
+  readonly headSample: [number, number][] = []
+  /** How far the back of the head may press into the floor (cm): hair, a bun, soft tissue. */
+  readonly headSink: number
   private views = new Map<View, ViewState>()
   private cur: ViewState | null = null
   private compiled = new WeakMap<Anim, Compiled>()
@@ -172,6 +176,7 @@ export class Driver {
 
   constructor(model: THREE.Object3D, key = '') {
     this.key = key
+    this.headSink = key === 'ava' ? 4 : 1.5
     this.root = new THREE.Group()
     this.root.add(model)
     model.traverse((o) => {
@@ -217,10 +222,10 @@ export class Driver {
       const elbows = { L: bindPos(m, 'L_Forearm'), R: bindPos(m, 'R_Forearm') }
       const knees = { L: bindPos(m, 'L_Calf'), R: bindPos(m, 'R_Calf') }
       for (let i = 0; i < pos.count; i++) {
-        if (i % 3 === 0) this.sample.push([mi, i])
         let best = 0
         for (let k = 1; k < 4; k++) if (sw.getComponent(i, k) > sw.getComponent(i, best)) best = k
         const n = name(m.skeleton.bones[si.getComponent(i, best)])
+        if (i % 3 === 0) (n === 'Head' ? this.headSample : this.sample).push([mi, i])
         const p = _v.fromBufferAttribute(pos, i).applyMatrix4(m.bindMatrix)
         const id: [number, number] = [mi, i]
         if (n === 'Head') add('head', id)
@@ -492,7 +497,13 @@ export class Driver {
 
   /** Lowest point of the posed mesh. */
   lowest() {
-    return this.minY(this.sample)
+    return Math.min(this.minY(this.sample), this.minY(this.headSample) + this.headSink)
+  }
+
+  /** Height of a body part's lowest point (the head counts its give against the floor). */
+  partY(c: ContactName) {
+    const y = this.minY(this.parts.get(c) ?? [])
+    return c === 'head' ? y + this.headSink : y
   }
 
   /** Re-level a keyframe so its declared floor contacts rest on the floor with this body's proportions. */
@@ -573,6 +584,7 @@ export class Driver {
       const t = anim.mode === 'loop' ? (i / n) * tempo : (i / n) * tempo * 1.2
       this.update(anim, t, tempo, flip)
       for (const [mi, k] of this.sample) box.expandByPoint(this.vtx(mi, k, _w))
+      for (const [mi, k] of this.headSample) box.expandByPoint(this.vtx(mi, k, _w))
     }
     return box
   }

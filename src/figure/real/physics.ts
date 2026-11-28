@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { Anim } from '../anim'
+import type { Anim, Reach } from '../anim'
 import { type ContactName, type Pose, type View } from '../skeleton'
 import type { Driver } from './rig'
 
@@ -186,7 +186,7 @@ export class Physics {
     const headSet = new Set<THREE.Object3D>()
     d.bone('Head').traverse((o) => headSet.add(o))
     const bySeg = new Map<string, { mi: number; i: number }[]>()
-    for (const [mi, i] of d.sample) {
+    for (const [mi, i] of [...d.sample, ...d.headSample]) {
       const m = d.meshes[mi]
       const g = m.geometry
       const si = g.attributes.skinIndex, sw = g.attributes.skinWeight
@@ -278,21 +278,40 @@ export class Physics {
   measure(contacts: ContactName[] = [], pose?: Pose): Measure {
     const d = this.d
     const low = d.lowest()
-    const pts: { x: number; z: number }[] = []
-    for (const [mi, i] of d.sample) {
-      const p = d.vtx(mi, i, _v)
-      if (p.y < low + 1.2) pts.push({ x: p.x, z: p.z })
-    }
-    const h = hull(pts)
+    const h = hull(this.floorPoints(low))
     const com = this.com()
     return {
       balance: polyDist(h, com.x, com.z),
       com,
       support: h,
       clips: this.clips(),
-      gaps: contacts.map((c) => ({ c, gap: d.minY(d.parts.get(c) ?? []) - low })),
+      gaps: contacts.map((c) => ({ c, gap: d.partY(c) - low })),
       limits: pose ? limitErrors(pose) : [],
     }
+  }
+
+  /** How far a hand is from where it should hold on (cm). */
+  reachGap(r: Reach) {
+    const d = this.d
+    const a = d.bone(`${r.hand}_Hand`).getWorldPosition(_a)
+    const b = d.bone(`${r.hand}_Finger2`).getWorldPosition(_b)
+    const palm = a.add(b).multiplyScalar(0.5)
+    return palm.distanceTo(d.bone(r.to).getWorldPosition(_c)) - r.d
+  }
+
+  /** Points of the body resting on the floor (within 1.2 cm of it). */
+  private floorPoints(low: number) {
+    const d = this.d
+    const pts: { x: number; z: number }[] = []
+    for (const [mi, i] of d.sample) {
+      const q = d.vtx(mi, i, _v)
+      if (q.y < low + 1.2) pts.push({ x: q.x, z: q.z })
+    }
+    for (const [mi, i] of d.headSample) {
+      const q = d.vtx(mi, i, _v)
+      if (q.y + d.headSink < low + 1.2) pts.push({ x: q.x, z: q.z })
+    }
+    return pts
   }
 
   /** Parts touching the floor in the current pose (feet, hands, knees, …). */
@@ -300,7 +319,7 @@ export class Physics {
     const d = this.d
     const low = d.lowest()
     const out: ContactName[] = []
-    for (const [c, ids] of d.parts) if (d.minY(ids) - low < 0.8) out.push(c)
+    for (const c of d.parts.keys()) if (d.partY(c) - low < 0.8) out.push(c)
     return out
   }
 
@@ -310,7 +329,7 @@ export class Physics {
    * support with a little margin, limbs don't pass through each other, and
    * joints stay in range.
    */
-  settle(pose: Pose, view: View, contacts: ContactName[], opts: { balance?: boolean } = {}): { pose: Pose; before: number; after: number } {
+  settle(pose: Pose, view: View, contacts: ContactName[], opts: { balance?: boolean; reach?: Reach[] } = {}): { pose: Pose; before: number; after: number } {
     const d = this.d
     const balance = opts.balance ?? true
     const energy = (p: Pose) => {
@@ -318,18 +337,17 @@ export class Physics {
       const low = d.lowest()
       let e = 0
       for (const c of contacts) {
-        const g = d.minY(d.parts.get(c) ?? []) - low
+        const g = d.partY(c) - low
         e += 4 * g * g
       }
       if (balance) {
-        const pts: { x: number; z: number }[] = []
-        for (const [mi, i] of d.sample) {
-          const q = d.vtx(mi, i, _v)
-          if (q.y < low + 1.2) pts.push({ x: q.x, z: q.z })
-        }
         const com = this.com()
-        const out = polyDist(hull(pts), com.x, com.z) + 2.5
+        const out = polyDist(hull(this.floorPoints(low)), com.x, com.z) + 2.5
         if (out > 0) e += 3 * out * out
+      }
+      for (const r of opts.reach ?? []) {
+        const g = this.reachGap(r)
+        e += 2 * g * g
       }
       for (const c of this.clips()) e += 2 * c.depth * c.depth
       for (const l of limitErrors(p)) e += 1 * l.over * l.over
@@ -397,7 +415,7 @@ const SIDE_PAIRS: [keyof Pose, keyof Pose][] = [
  * of a pair are posed the same, the far one touches too.
  */
 export function withPairs(pose: Pose, contacts: ContactName[]): ContactName[] {
-  const same = (...ks: string[]) => ks.every((k) => Math.abs(pose[`l${k}` as keyof Pose] - pose[`r${k}` as keyof Pose]) < 2)
+  const same = (...ks: string[]) => ks.every((k) => Math.abs(pose[`l${k}` as keyof Pose] - pose[`r${k}` as keyof Pose]) < 10)
   const out = new Set(contacts)
   for (const c of contacts) {
     const m = /^([lr])(Hand|Elbow|Knee|Heel|Toe)$/.exec(c)

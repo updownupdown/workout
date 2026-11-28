@@ -57,7 +57,7 @@ function readExisting() {
         const frames = comp.poses.map((pose, i) => {
           d.pose(pose, anim.view)
           const contacts = P.contactsFor(anim, i, pose) ?? ph.touching()
-          const res = ph.settle(pose, anim.view, contacts)
+          const res = ph.settle(pose, anim.view, contacts, { reach: anim.reach?.[i] ?? [] })
           d.pose(res.pose, anim.view)
           const ms = ph.measure(contacts, res.pose)
           const diff = { rot: Math.round(res.pose.rot * 2) / 2 }

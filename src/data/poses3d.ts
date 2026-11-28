@@ -1,4 +1,4 @@
-import type { Anim } from '../figure/anim'
+import type { Anim, Reach } from '../figure/anim'
 import type { AnchorName, ContactName, PoseInput, View } from '../figure/skeleton'
 
 /**
@@ -18,6 +18,8 @@ export interface Fix3D {
   contacts?: (ContactName[] | null)[]
   /** Extra floor contacts per keyframe, added to the move's own. */
   touch?: (ContactName[] | null)[]
+  /** Hands holding on to the body, per keyframe. */
+  reach?: (Reach[] | null)[]
 }
 
 // ---------------------------------------------------------------- building blocks
@@ -33,9 +35,15 @@ const HANDS_BEHIND_HEAD: PoseInput = { lSh: 170, rSh: 170, lShX: 55, rShX: 55, l
 const ARMS_DOWN: PoseInput = { lSh: -8, rSh: -8, lShX: 18, rShX: 18, lEl: 0, rEl: 0 }
 const HANDS: ContactName[] = ['lHand', 'rHand']
 
+const ON_KNEES: Reach[] = [{ hand: 'L', to: 'L_Calf', d: 9 }, { hand: 'R', to: 'R_Calf', d: 9 }]
+const ON_FEET: Reach[] = [{ hand: 'L', to: 'L_Foot', d: 7 }, { hand: 'R', to: 'R_Foot', d: 7 }]
+const ON_HEAD: Reach[] = [{ hand: 'L', to: 'Head', d: 11 }, { hand: 'R', to: 'Head', d: 11 }]
+const PALMS: Reach[] = [{ hand: 'L', to: 'R_Hand', d: 6 }]
+
 const BREATH: Fix3D = {
   frames: [{ ...CROSS_LEGGED, ...HANDS_ON_KNEES }, { ...CROSS_LEGGED, ...HANDS_ON_KNEES, lSh: 14, rSh: 14 }],
   contacts: [['pelvis'], ['pelvis']],
+  reach: [ON_KNEES, ON_KNEES],
 }
 const both = <T,>(p: T, n: number): T[] => Array.from({ length: n }, () => p)
 const hands = (n: number) => both(HANDS, n)
@@ -55,22 +63,29 @@ export const FIX3D: Record<string, Fix3D> = {
       { lHip: 70, rHip: 70, lHipX: 58, rHipX: 58, lKnee: 150, rKnee: 150, lAnk: 0, rAnk: 0, ...HANDS_ON_KNEES, lShX: 55, rShX: 55, lEl: 40, rEl: 40 },
     ],
     contacts: [['pelvis'], ['pelvis']],
+    reach: [ON_FEET, ON_FEET],
   },
   'straddle-side': { frames: both({ lHip: 50, rHip: 50, lHipX: 45, rHipX: 45 }, 2), contacts: [['pelvis', 'lHeel', 'rHeel'], ['pelvis', 'lHeel', 'rHeel']] },
 
   // front view: arms in front of the body, not through it
   'open-hug': { frames: [{ lShX: -15, rShX: -15 }, { lSh: 90, rSh: 90, lShX: 70, rShX: 70, lEl: 40, rEl: 40 }] },
   'band-pull-apart': { frames: [{ lSh: 90, rSh: 90, lShX: 85, rShX: 85, lEl: 0, rEl: 0 }, { lShX: -5, rShX: -5 }] },
-  'sumo-squat': { frames: both(PRAYER, 2) },
-  'lateral-lunge': { frames: both(PRAYER, 2) },
-  'band-walk': { frames: both(PRAYER, 2) },
-  'cross-shoulder': { frames: [null, { rSh: 90, rShX: 115, rEl: 0, lSh: 30, lShX: 70, lEl: 100, lShTw: -90 }] },
-  'triceps-stretch': { frames: [null, { rSh: 172, rEl: 150, rShTw: 90, lSh: 160, lEl: 90, lShTw: 90 }] },
+  'sumo-squat': { frames: both(PRAYER, 2), reach: both(PALMS, 2) },
+  'lateral-lunge': { frames: both(PRAYER, 2), reach: both(PALMS, 2) },
+  'band-walk': { frames: both(PRAYER, 2), reach: both(PALMS, 2) },
+  'cross-shoulder': {
+    frames: [null, { rSh: 90, rShX: 115, rEl: 0, lSh: 30, lShX: 70, lEl: 100, lShTw: -90 }],
+    reach: [null, [{ hand: 'L', to: 'R_Forearm', d: 7 }]],
+  },
+  'triceps-stretch': {
+    frames: [null, { rSh: 172, rEl: 150, rShTw: 90, lSh: 160, lEl: 90, lShTw: 90 }],
+    reach: [null, [{ hand: 'L', to: 'R_Forearm', d: 6 }]],
+  },
   'db-upright-row': { frames: [null, { lShX: 12, rShX: 12 }] },
 
   // hands behind the head: elbows out to the sides
-  'good-morning': { frames: both(HANDS_BEHIND_HEAD, 2) },
-  bicycle: { frames: [{ ...HANDS_BEHIND_HEAD, twist: -28 }, { ...HANDS_BEHIND_HEAD, twist: 28 }] },
+  'good-morning': { frames: both(HANDS_BEHIND_HEAD, 2), reach: both(ON_HEAD, 2) },
+  bicycle: { frames: [{ ...HANDS_BEHIND_HEAD, twist: -28 }, { ...HANDS_BEHIND_HEAD, twist: 28 }], reach: both(ON_HEAD, 2) },
 
   // lying down: arms rest on the floor
   savasana: { frames: [ARMS_DOWN, ARMS_DOWN], touch: hands(2) },
@@ -105,7 +120,7 @@ export const FIX3D: Record<string, Fix3D> = {
   puppy: { frames: [null, { lSh: 188, rSh: 188, lEl: 0, rEl: 0, lWr: 0, rWr: 0 }] },
   dolphin: { frames: [{ lSh: 90, rSh: 90, lEl: 90, rEl: 90, lWr: 0, rWr: 0, lHip: 90, rHip: 90 }, null] },
   pigeon: {
-    frames: [null, { torso: 25, rHip: 80, rKnee: 105, rHipTw: 75, rHipX: 20, rAnk: 0, lHip: -40, lKnee: 0, lAnk: 85 }],
+    frames: [null, { torso: 25, rHip: 80, rKnee: 105, rHipTw: -75, rHipX: 20, rAnk: 0, lHip: -40, lKnee: 0, lAnk: 85 }],
     contacts: [null, ['rKnee', 'rHeel', 'lKnee', 'lToe', 'pelvis']],
   },
 }
@@ -126,6 +141,7 @@ export function for3D(anim: Anim): Anim {
     frames,
     contacts: f.contacts ?? (f.replace ? undefined : anim.contacts),
     touch: f.touch,
+    reach: f.reach,
   }
   fixed.set(anim, out)
   return out
