@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { decodeSession, encodeSession, generate, Session, Settings } from './engine/generator'
+import { decodeSession, encodeSession, figureOf, generate, Session, Settings } from './engine/generator'
 import { THEME_BY_ID } from './engine/themes'
 import { Home } from './screens/Home'
 import { Preview } from './screens/Preview'
@@ -101,8 +101,7 @@ export function App() {
         session={session}
         sound={settings.chimes}
         onSound={(v) => setSettings({ ...settings, chimes: v })}
-        view3d={settings.view3d}
-        figure3d={settings.figure3d}
+        figure={figureOf(settings)}
         onExit={() => setScreen('preview')}
         onDone={() => setScreen('done')}
       />

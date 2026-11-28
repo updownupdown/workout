@@ -126,9 +126,9 @@ export const FLOOR: Record<string, C[]> = {
 
 export function applyFloor(moves: Move[]): Move[] {
   return moves.map((m) => {
-    if (!FLOOR[m.id]) return m
+    if (!FLOOR[m.id]) return { ...m, anim: { ...m.anim, id: m.id } }
     const baked = SETTLED[m.id]
     const frames = baked ? m.anim.frames.map((f, i) => (baked[i] ? { ...f, ...baked[i] } : f)) : m.anim.frames
-    return { ...m, anim: { ...m.anim, frames, contacts: FLOOR[m.id] } }
+    return { ...m, anim: { ...m.anim, id: m.id, frames, contacts: FLOOR[m.id] } }
   })
 }

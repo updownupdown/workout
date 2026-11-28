@@ -43,6 +43,28 @@ export interface Pose {
   rKnee: number
   lAnk: number
   rAnk: number
+  // ---- 3D extras (ignored by the 2D solver; 0 = planar) --------------------
+  /** Limb lifted out of the move's plane: side view = abduction (out to the side), front view = flexion (forward). */
+  lShX: number
+  rShX: number
+  lHipX: number
+  rHipX: number
+  /** Limb twist about its own axis: + = external rotation (knee / elbow crease turns outward). */
+  lShTw: number
+  rShTw: number
+  lHipTw: number
+  rHipTw: number
+  /** Upper-body rotation about the spine, + = chest turns to the figure's left. */
+  twist: number
+  /** Head turn, + = to the figure's left. */
+  headTw: number
+  /**
+   * Whole-body lean out of the move's plane, about the floor (side view: toward
+   * the figure's left; front view: forward). Used to shift weight over a foot.
+   */
+  tilt: number
+  /** Trunk bend out of the move's plane (side view: side bend to the left; front view: forward). */
+  bendX: number
 }
 
 export type PoseInput = Partial<Pose>
@@ -64,6 +86,18 @@ export const NEUTRAL: Pose = {
   rKnee: 0,
   lAnk: 0,
   rAnk: 0,
+  lShX: 0,
+  rShX: 0,
+  lHipX: 0,
+  rHipX: 0,
+  lShTw: 0,
+  rShTw: 0,
+  lHipTw: 0,
+  rHipTw: 0,
+  twist: 0,
+  headTw: 0,
+  tilt: 0,
+  bendX: 0,
 }
 
 export const full = (p: PoseInput): Pose => ({ ...NEUTRAL, ...p })

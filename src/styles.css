@@ -121,9 +121,7 @@ h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
 .figure .fig-glow circle { fill: var(--accent); }
 .figure.pulse .fig-glow { animation: glow 2.4s ease-in-out infinite; }
 @keyframes glow { 50% { opacity: 0.2; } }
-.figure3d { width: 100%; height: 100%; touch-action: none; }
-.figure3d canvas { display: block; width: 100% !important; height: 100% !important; }
-.stage .figure3d, .stage .figure-real { position: absolute; inset: 0; width: 100%; height: 100%; }
+.stage .figure-real { position: absolute; inset: 0; width: 100%; height: 100%; }
 .figure-real { touch-action: none; }
 
 /* ============================================================ home */
@@ -324,15 +322,20 @@ h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
 }
 .stage .figure { position: absolute; left: 6%; bottom: 9%; width: 88%; height: 80%; }
 .ready {
-  position: absolute; top: 14px; left: 14px; display: flex; align-items: center; gap: 10px;
-  background: rgba(10, 12, 16, 0.55); backdrop-filter: blur(10px); padding: 8px 14px 8px 10px; border-radius: 99px;
-  border: 1px solid var(--line);
+  /* the figure previews the move underneath; the veil says it hasn't started */
+  position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 6px;
+  background: radial-gradient(60% 50% at 50% 45%, rgba(8, 9, 12, 0.35), rgba(8, 9, 12, 0.62));
+  pointer-events: none; text-align: center; padding: 0 24px;
 }
-.ready span { font-size: 13px; color: var(--ink-2); font-weight: 500; }
+.ready span { font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
 .ready b {
-  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 16px; font-weight: 600;
-  background: var(--c); color: #120c08; font-variant-numeric: tabular-nums;
+  font-size: clamp(72px, 22vmin, 132px); line-height: 1; font-weight: 600; color: var(--ink);
+  font-variant-numeric: tabular-nums; text-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+  animation: ready-pop 1s ease-out both;
 }
+.ready small { font-size: 15px; color: var(--ink-2); font-weight: 500; }
+@keyframes ready-pop { from { transform: scale(1.18); opacity: 0.4; } 30% { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ready b { animation: none; } }
 .paused-badge {
   position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px;
   background: rgba(8, 9, 12, 0.55); backdrop-filter: blur(4px); font-weight: 500; color: var(--ink-2);
@@ -460,8 +463,8 @@ h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
 .set-block { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
 .set-label { font-weight: 500; }
 .switch-btn { padding: 0; background: none; border: 0; }
-.figure-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; transition: opacity 0.2s; }
-.figure-cards.dim { opacity: 0.55; }
+.figure-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-width: 360px; }
+.set-note { margin: 0 0 10px; color: var(--ink-2); font-size: 14px; }
 .figure-card {
   position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 0; overflow: hidden;
   border-radius: 18px; background: radial-gradient(90% 60% at 50% 95%, rgba(255, 255, 255, 0.08), transparent 70%), #12141b;

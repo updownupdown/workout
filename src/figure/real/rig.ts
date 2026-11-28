@@ -1,3 +1,5 @@
+import { SETTLED3D } from '../../data/settled3d'
+import { for3D } from '../../data/poses3d'
 import * as THREE from 'three'
 import {
   AnchorName,
@@ -52,6 +54,7 @@ const smooth = (a: number, b: number, x: number) => {
 // ---------------------------------------------------------------- mirroring
 const PAIRS: [keyof Pose, keyof Pose][] = [
   ['lSh', 'rSh'], ['lEl', 'rEl'], ['lWr', 'rWr'], ['lHip', 'rHip'], ['lKnee', 'rKnee'], ['lAnk', 'rAnk'],
+  ['lShX', 'rShX'], ['lHipX', 'rHipX'], ['lShTw', 'rShTw'], ['lHipTw', 'rHipTw'],
 ]
 const swapLR = <T extends string>(n: T): T =>
   (n[0] === 'l' && n[1] === n[1].toUpperCase() ? 'r' + n.slice(1) : n[0] === 'r' && n[1] === n[1].toUpperCase() ? 'l' + n.slice(1) : n) as T
@@ -64,12 +67,15 @@ function mirrorFrame(f: PoseInput, view: View): PoseInput {
     if (f[b] !== undefined) o[a] = f[b]
     if (f[a] !== undefined) o[b] = f[a]
   }
-  if (view === 'front') for (const k of ['torso', 'spine', 'head', 'rot'] as const) if (f[k] !== undefined) o[k] = -f[k]!
+  const neg: (keyof Pose)[] = view === 'front' ? ['torso', 'spine', 'head', 'rot', 'twist', 'headTw'] : ['twist', 'headTw', 'tilt', 'bendX']
+  for (const k of neg) if (f[k] !== undefined) o[k] = -f[k]!
   return o
 }
 
 const mirrored = new WeakMap<Anim, Anim>()
 /** The same move done on the other side. */
+export const mirrorPose = (p: Pose, view: View) => mirrorFrame(p, view) as Pose
+
 export function mirrorAnim(a: Anim): Anim {
   const hit = mirrored.get(a)
   if (hit) return hit
@@ -84,6 +90,9 @@ export function mirrorAnim(a: Anim): Anim {
 }
 
 const TAU = Math.PI * 2
+const DEG = Math.PI / 180
+/** Relaxed collarbone drop from the model's T-pose, released as the arms go overhead. */
+const CLAV_DROP = 0.16
 const wrap = (a: number) => {
   a = (a + Math.PI) % TAU
   if (a < 0) a += TAU
@@ -138,6 +147,8 @@ interface ViewState {
   theta0: Record<Seg, number>
   /** Hand direction and palm normal (world) in the neutral stance. */
   hand: Record<'L' | 'R', { d: THREE.Vector3; p: THREE.Vector3 }>
+  /** Relaxed collarbone local rotations, restored before every pose. */
+  clav: Record<'L' | 'R', THREE.Quaternion>
 }
 
 export class Driver {
@@ -146,9 +157,13 @@ export class Driver {
   private bones = new Map<string, THREE.Bone>()
   private rest = new Map<THREE.Bone, { q: THREE.Quaternion; p: THREE.Vector3 }>()
   /** Vertex ids (mesh index, vertex index) per body part, for floor contacts. */
-  private parts = new Map<ContactName, [number, number][]>()
+  readonly parts = new Map<ContactName, [number, number][]>()
   /** Every n-th vertex, for finding the lowest point fast. */
-  private sample: [number, number][] = []
+  readonly sample: [number, number][] = []
+  /** Sampled head vertices, kept apart: hair and scalp give a little against the floor. */
+  readonly headSample: [number, number][] = []
+  /** How far the back of the head may press into the floor (cm): hair, a bun, soft tissue. */
+  readonly headSink: number
   private views = new Map<View, ViewState>()
   private cur: ViewState | null = null
   private compiled = new WeakMap<Anim, Compiled>()
@@ -156,7 +171,12 @@ export class Driver {
   /** Height of the surface the figure stands on. */
   floorY = 0
 
-  constructor(model: THREE.Object3D) {
+  /** Character key, for poses baked against this body (src/data/settled3d.ts). */
+  readonly key: string
+
+  constructor(model: THREE.Object3D, key = '') {
+    this.key = key
+    this.headSink = key === 'ava' ? 4 : 1.5
     this.root = new THREE.Group()
     this.root.add(model)
     model.traverse((o) => {
@@ -193,6 +213,8 @@ export class Driver {
       return new THREE.Vector3().setFromMatrixPosition(m.skeleton.boneInverses[i].clone().invert())
     }
     this.meshes.forEach((m, mi) => {
+      // hair (alpha-tested cards) is soft: it doesn't hold the body off the floor
+      if ((m.material as THREE.Material).alphaTest > 0) return
       const g = m.geometry
       const si = g.attributes.skinIndex
       const sw = g.attributes.skinWeight
@@ -200,10 +222,10 @@ export class Driver {
       const elbows = { L: bindPos(m, 'L_Forearm'), R: bindPos(m, 'R_Forearm') }
       const knees = { L: bindPos(m, 'L_Calf'), R: bindPos(m, 'R_Calf') }
       for (let i = 0; i < pos.count; i++) {
-        if (i % 3 === 0) this.sample.push([mi, i])
         let best = 0
         for (let k = 1; k < 4; k++) if (sw.getComponent(i, k) > sw.getComponent(i, best)) best = k
         const n = name(m.skeleton.bones[si.getComponent(i, best)])
+        if (i % 3 === 0) (n === 'Head' ? this.headSample : this.sample).push([mi, i])
         const p = _v.fromBufferAttribute(pos, i).applyMatrix4(m.bindMatrix)
         const id: [number, number] = [mi, i]
         if (n === 'Head') add('head', id)
@@ -245,6 +267,15 @@ export class Driver {
     this.root.rotation.y = yaw
     this.root.updateMatrixWorld(true)
 
+    // T-poses are modelled with the shoulders shrugged a little. Drop the
+    // collarbones to a relaxed height before hanging the arms.
+    for (const S of ['L', 'R'] as const) {
+      const clav = this.bone(`${S}_Clavicle`)
+      const a = clav.getWorldPosition(new THREE.Vector3())
+      const d = this.bone(`${S}_UpperArm`).getWorldPosition(new THREE.Vector3()).sub(a).normalize()
+      const axis = d.clone().cross(new THREE.Vector3(0, 1, 0)).normalize()
+      this.setWorldQuat(clav, _q.setFromAxisAngle(axis, -CLAV_DROP).multiply(clav.getWorldQuaternion(_p)).clone())
+    }
     // Lower the T-pose arms to hang by the sides with a little daylight.
     for (const S of ['L', 'R'] as const) {
       const up = this.bone(`${S}_UpperArm`)
@@ -274,7 +305,11 @@ export class Driver {
       const p = S === 'R' ? t.clone().cross(d) : d.clone().cross(t)
       hand[S] = { d, p: p.normalize() }
     }
-    const st: ViewState = { view, yaw, neutral, theta0: segAngles(solve(NEUTRAL, view)), hand }
+    const clav = {
+      L: this.bone('L_Clavicle').quaternion.clone(),
+      R: this.bone('R_Clavicle').quaternion.clone(),
+    }
+    const st: ViewState = { view, yaw, neutral, theta0: segAngles(solve(NEUTRAL, view)), hand, clav }
     // remember the lowered-arm locals as the new rest for unposed children (hands, fingers)
     this.views.set(view, st)
     return st
@@ -292,7 +327,9 @@ export class Driver {
       this.cur = this.viewState(view)
     }
     const st = this.cur
-    this.root.rotation.set(0, st.yaw, 0)
+    // tilt: lean out of the move's plane (world x is in-plane horizontal in both views)
+    this.root.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), (view === 'side' ? -1 : 1) * p.tilt * DEG)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), st.yaw))
     this.root.position.set(0, 0, 0)
     this.root.updateMatrixWorld(true)
     const th = segAngles(solve(p, view))
@@ -308,6 +345,8 @@ export class Driver {
       this.setWorldQuat(this.bone(s), _q)
     }
     TORSO.forEach(plane)
+    for (const S of ['L', 'R'] as const) this.bone(`${S}_Clavicle`).quaternion.copy(st.clav[S])
+    this.root.updateMatrixWorld(true)
 
     // Shoulders: lift the collarbones as the arms go overhead (scapulohumeral
     // rhythm). Moves the shoulder joint up so the skin doesn't fold.
@@ -315,7 +354,7 @@ export class Driver {
     const bodyUp = this.bone('Neck').getWorldPosition(new THREE.Vector3()).sub(spine2).normalize()
     for (const S of ['L', 'R'] as const) {
       const sh = S === 'L' ? p.lSh : p.rSh
-      const lift = smooth(70, 175, sh) * 0.12
+      const lift = smooth(60, 175, sh) * (0.12 + CLAV_DROP)
       if (lift <= 0) continue
       const clav = this.bone(`${S}_Clavicle`)
       const a = clav.getWorldPosition(new THREE.Vector3())
@@ -325,13 +364,89 @@ export class Driver {
       this.setWorldQuat(clav, _q2)
     }
 
+    const F0 = view === 'side' ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1)
+    const chestFwd = F0.clone().applyQuaternion(turn('Spine2'))
+    const shoulderRight = this.bone('R_UpperArm').getWorldPosition(new THREE.Vector3())
+      .sub(this.bone('L_UpperArm').getWorldPosition(new THREE.Vector3())).normalize()
     for (const S of ['L', 'R'] as const) {
       plane(`${S}_UpperArm`)
       plane(`${S}_Forearm`)
       this.poseHand(S, S === 'L' ? p.lWr : p.rWr, turn(`${S}_Hand`).clone(), st)
+      const s = S === 'L' ? 'l' : 'r'
+      this.limbExtra(S, 'arm', p[`${s}ShX`], p[`${s}ShTw`], view === 'side' ? shoulderRight : chestFwd, view)
     }
+    if (p.twist || p.headTw) this.twistUpper(p.twist, p.headTw)
+    if (p.bendX) this.bendUpper((view === 'side' ? chestFwd : shoulderRight).clone().multiplyScalar(-1), p.bendX)
+
     LEGS.forEach(plane)
+    const pelvisFwd = F0.clone().applyQuaternion(turn('Pelvis'))
+    const hipRight = this.bone('R_Thigh').getWorldPosition(new THREE.Vector3())
+      .sub(this.bone('L_Thigh').getWorldPosition(new THREE.Vector3())).normalize()
+    for (const S of ['L', 'R'] as const) {
+      const s = S === 'L' ? 'l' : 'r'
+      this.limbExtra(S, 'leg', p[`${s}HipX`], p[`${s}HipTw`], view === 'side' ? hipRight : pelvisFwd, view)
+    }
     this.skin()
+  }
+
+  /**
+   * Out-of-plane motion for a whole limb, about its root joint:
+   *  x  - lift the limb out of the move's plane (side view: out to its own
+   *       side; front view: forward), in degrees
+   *  tw - twist about the limb's own axis, + = external rotation
+   */
+  private limbExtra(S: 'L' | 'R', kind: 'arm' | 'leg', x: number, tw: number, out: THREE.Vector3, view: View) {
+    if (!x && !tw) return
+    const chain = kind === 'arm'
+      ? [`${S}_UpperArm`, `${S}_Forearm`, `${S}_Hand`]
+      : [`${S}_Thigh`, `${S}_Calf`, `${S}_Foot`]
+    const a = this.bone(chain[0]).getWorldPosition(new THREE.Vector3())
+    const d = this.bone(chain[1]).getWorldPosition(new THREE.Vector3()).sub(a).normalize()
+    const sgn = S === 'R' ? 1 : -1
+    const R = new THREE.Quaternion()
+    if (x) {
+      const n = view === 'side' ? out.clone().multiplyScalar(sgn) : out
+      const axis = d.clone().cross(n)
+      if (axis.lengthSq() > 1e-6) R.setFromAxisAngle(axis.normalize(), x * DEG)
+    }
+    if (tw) R.multiply(new THREE.Quaternion().setFromAxisAngle(d, tw * sgn * DEG))
+    this.rotateChain(chain, R)
+  }
+
+  private rotateChain(chain: string[], R: THREE.Quaternion) {
+    const qs = chain.map((n) => this.bone(n).getWorldQuaternion(new THREE.Quaternion()))
+    chain.forEach((n, i) => this.setWorldQuat(this.bone(n), R.clone().multiply(qs[i])))
+  }
+
+  /** Bend the trunk out of plane about `axis` (through the lumbar spine). */
+  private bendUpper(axis: THREE.Vector3, deg: number) {
+    const names = ['Spine1', 'Spine2', 'L_Clavicle', 'R_Clavicle', 'Neck', 'Head',
+      'L_UpperArm', 'L_Forearm', 'L_Hand', 'R_UpperArm', 'R_Forearm', 'R_Hand']
+    const qs = names.map((n) => this.bone(n).getWorldQuaternion(new THREE.Quaternion()))
+    const part = new THREE.Quaternion().setFromAxisAngle(axis, deg * 0.5 * DEG)
+    const all = new THREE.Quaternion().setFromAxisAngle(axis, deg * DEG)
+    // half at the lower back, the rest above it; the head stays near level
+    const head = new THREE.Quaternion().setFromAxisAngle(axis, deg * 0.6 * DEG)
+    names.forEach((n, i) => {
+      const R = n === 'Spine1' ? part : n === 'Head' || n === 'Neck' ? head : all
+      this.setWorldQuat(this.bone(n), R.clone().multiply(qs[i]))
+    })
+  }
+
+  /** Turn the chest (and everything above it) about the spine; + = to the figure's left. */
+  private twistUpper(twist: number, headTw: number) {
+    const s1 = this.bone('Spine1').getWorldPosition(new THREE.Vector3())
+    const up = this.bone('Neck').getWorldPosition(new THREE.Vector3()).sub(s1).normalize()
+    const names = ['Spine1', 'Spine2', 'Neck', 'Head',
+      'L_UpperArm', 'L_Forearm', 'L_Hand', 'R_UpperArm', 'R_Forearm', 'R_Hand']
+    const qs = names.map((n) => this.bone(n).getWorldQuaternion(new THREE.Quaternion()))
+    const full = new THREE.Quaternion().setFromAxisAngle(up, twist * DEG)
+    const half = new THREE.Quaternion().setFromAxisAngle(up, twist * 0.45 * DEG)
+    const head = new THREE.Quaternion().setFromAxisAngle(up, (twist + headTw) * DEG)
+    names.forEach((n, i) => {
+      const R = n === 'Spine1' ? half : n === 'Head' ? head : n === 'Neck' ? full.clone().slerp(head, 0.4) : full
+      this.setWorldQuat(this.bone(n), R.clone().multiply(qs[i]))
+    })
   }
 
   /**
@@ -370,11 +485,11 @@ export class Driver {
     this.meshes.forEach((m, i) => (this.dq[i] = boneDQs(m, this.dq[i])))
   }
 
-  private vtx(mi: number, i: number, out: THREE.Vector3) {
+  vtx(mi: number, i: number, out: THREE.Vector3) {
     return dqsVertex(this.meshes[mi], this.dq[mi], i, out)
   }
 
-  private minY(ids: [number, number][]) {
+  minY(ids: [number, number][]) {
     let y = Infinity
     for (const [mi, i] of ids) y = Math.min(y, this.vtx(mi, i, _w).y)
     return y
@@ -382,7 +497,28 @@ export class Driver {
 
   /** Lowest point of the posed mesh. */
   lowest() {
-    return this.minY(this.sample)
+    return Math.min(this.minY(this.sample), this.headLow())
+  }
+
+  /** Lowest point of the head, counting the give of hair only on the back of the head. */
+  private headLow() {
+    let y = Infinity
+    const p = new THREE.Vector3()
+    for (const [mi, i] of this.headSample) {
+      const v = this.vtx(mi, i, _w)
+      if (v.y < y) {
+        y = v.y
+        p.copy(v)
+      }
+    }
+    const head = this.bone('Head').getWorldPosition(new THREE.Vector3())
+    const face = this.bone('MNose').getWorldPosition(new THREE.Vector3()).sub(head)
+    return p.sub(head).dot(face) < 0 ? y + this.headSink : y
+  }
+
+  /** Height of a body part's lowest point (the head counts its give against the floor). */
+  partY(c: ContactName) {
+    return c === 'head' ? this.headLow() : this.minY(this.parts.get(c) ?? [])
   }
 
   /** Re-level a keyframe so its declared floor contacts rest on the floor with this body's proportions. */
@@ -416,30 +552,43 @@ export class Driver {
   }
 
   /** Compile a move for this body: re-level keyframes with ≥2 floor contacts. */
-  compile(anim: Anim): Compiled {
-    const hit = this.compiled.get(anim)
+  compile(src: Anim): Compiled {
+    const hit = this.compiled.get(src)
     if (hit) return hit
+    const anim = for3D(src)
     const base = compile(anim)
+    const baked = anim.id ? SETTLED3D[this.key]?.[anim.id] : undefined
+    if (baked) {
+      const out = { ...base, poses: base.poses.map((p, i) => ({ ...p, ...baked[i] })) }
+      this.compiled.set(src, out)
+      return out
+    }
     const poses = base.poses.map((p, i) => {
       const c = anim.contacts?.[i]
       return c && c.length >= 2 ? this.level(p, anim.view, c) : p
     })
     const out = { ...base, poses }
-    this.compiled.set(anim, out)
+    this.compiled.set(src, out)
     return out
   }
 
   /** Pose at time t, grounded on the floor and pinned at the move's anchor. */
   update(anim: Anim, t: number, tempo: number, flip = false) {
-    if (flip) anim = mirrorAnim(anim)
     const c = this.compile(anim)
-    const p = poseAt(c, t, tempo)
-    this.pose(p, anim.view)
+    const { view, anchor } = c.anim
+    let p = poseAt(c, t, tempo)
+    if (flip) p = mirrorPose(p, view)
+    this.pose(p, view)
     const low = this.lowest()
-    const a = this.bone(ANCHOR_BONE[anim.anchor]).getWorldPosition(_v)
+    const a = this.bone(ANCHOR_BONE[flip ? swapLR(anchor) : anchor]).getWorldPosition(_v)
     this.root.position.set(-a.x, this.floorY - low, 0)
     this.skin()
     return p
+  }
+
+  /** The view (side or front) the 3D figure plays a move in. */
+  viewOf(anim: Anim) {
+    return this.compile(anim).anim.view
   }
 
   /** World-space bounds of the figure across one cycle of a move. */
@@ -450,6 +599,7 @@ export class Driver {
       const t = anim.mode === 'loop' ? (i / n) * tempo : (i / n) * tempo * 1.2
       this.update(anim, t, tempo, flip)
       for (const [mi, k] of this.sample) box.expandByPoint(this.vtx(mi, k, _w))
+      for (const [mi, k] of this.headSample) box.expandByPoint(this.vtx(mi, k, _w))
     }
     return box
   }

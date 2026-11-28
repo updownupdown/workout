@@ -17,6 +17,8 @@ import {
 } from './skeleton'
 
 export interface Anim {
+  /** The move this animation belongs to (for per-body baked poses). */
+  id?: string
   view: View
   /** Joint kept fixed horizontally while the figure moves (feet for squats, hands for crawls). */
   anchor: AnchorName
@@ -33,10 +35,21 @@ export interface Anim {
    * Two or more contacts rotate the whole body so they all rest on the floor.
    */
   contacts?: (ContactName[] | null | undefined)[]
+  /** 3D only: extra floor contacts per keyframe (see data/poses3d.ts). */
+  touch?: (ContactName[] | null | undefined)[]
+  /** 3D only: hands that hold on to a body part, per keyframe (see data/poses3d.ts). */
+  reach?: (Reach[] | null | undefined)[]
   /** Loop whose last frame equals the first (e.g. +360°): no wrap-around segment. */
   closed?: boolean
   /** Pose the "breathing" idle subtly modulates while holding. */
   breathe?: boolean
+}
+
+/** A hand kept at a set distance (cm) from a bone, e.g. resting on a knee. */
+export interface Reach {
+  hand: 'L' | 'R'
+  to: string
+  d: number
 }
 
 export type BandPoint = 'lHand' | 'rHand' | 'lFoot' | 'rFoot' | 'lToe' | 'rToe' | 'lKnee' | 'rKnee' | 'anchor'
