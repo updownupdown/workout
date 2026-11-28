@@ -142,3 +142,4 @@ applyQuality()
 setChar(charKey)
 setMove(move)
 ;(window as unknown as { __real: RealScene }).__real = real
+;(window as unknown as { __moves: typeof MOVE_BY_ID }).__moves = MOVE_BY_ID

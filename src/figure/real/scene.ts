@@ -91,7 +91,7 @@ function loadAssets(c: Character): Promise<Assets> {
   return p
 }
 
-function makeDriver(a: Assets): Driver {
+function makeDriver(a: Assets, c: Character): Driver {
   const model = cloneSkinned(a.gltf.scene)
   const depth = useDQS(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }))
   const hairDepth = a.hairMap
@@ -111,7 +111,7 @@ function makeDriver(a: Assets): Driver {
     } else m.material = a.body
     m.customDepthMaterial = depth
   })
-  const d = new Driver(model)
+  const d = new Driver(model, c)
   d.floorY = MAT_H
   return d
 }
@@ -144,7 +144,7 @@ export class RealScene {
   private ro: ResizeObserver
   private disposed = false
   private quality: 'high' | 'lite'
-  private autoTime: boolean
+  autoTime: boolean
   readonly stats = { fps: 0, worst: 0, poseMs: 0, tris: 0 }
   onReady?: () => void
 
@@ -213,7 +213,7 @@ export class RealScene {
     const a = await loadAssets(c)
     if (this.disposed || this.character !== c) return
     if (this.driver) this.scene.remove(this.driver.root)
-    this.driver = makeDriver(a)
+    this.driver = makeDriver(a, c)
     this.scene.add(this.driver.root)
     this.framed = null
     this.onReady?.()
@@ -256,7 +256,7 @@ export class RealScene {
     const box = d.bounds(anim, this.tempo, this.flip)
     const c = box.getCenter(new THREE.Vector3())
     const size = box.getSize(new THREE.Vector3())
-    const side = anim.view === 'side'
+    const side = d.viewOf(anim) === 'side'
     this.mat.position.x = c.x
     const vfov = (this.camera.fov * Math.PI) / 180
     const needH = size.y * 1.15 + 24

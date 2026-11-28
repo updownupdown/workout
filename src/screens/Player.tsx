@@ -7,7 +7,6 @@ import { BreathPhase, CAT_META } from '../data/moves'
 import { chime, keepAwake, unlockAudio } from '../engine/cues'
 import { workOf } from '../data/muscles'
 
-const Figure3D = lazy(() => import('../figure/Figure3D'))
 const FigureReal = lazy(() => import('../figure/FigureReal'))
 import { fmtClock, stepLabel } from './format'
 
@@ -15,8 +14,7 @@ interface Props {
   session: Session
   sound: boolean
   onSound: (v: boolean) => void
-  view3d: boolean
-  figure3d: Figure3DKind
+  figure: Figure3DKind
   onExit: () => void
   onDone: () => void
 }
@@ -55,7 +53,7 @@ export function breathAt(pattern: BreathPhase[], t: number) {
 
 const PHASE_WORD = { in: 'Breathe in', hold: 'Hold', out: 'Breathe out' }
 
-export function Player({ session, sound, onSound, view3d, figure3d, onExit, onDone }: Props) {
+export function Player({ session, sound, onSound, figure, onExit, onDone }: Props) {
   const steps = session.steps
   const TRANSITION = readyOf(session.settings)
   const clock = useRef<Clock>({ i: 0, phase: 'ready', t: 0, paused: false, fired: new Set() })
@@ -184,18 +182,22 @@ export function Player({ session, sound, onSound, view3d, figure3d, onExit, onDo
   const CatIcon = CAT_ICON[m.cat]
   const next = steps[c.i + 1]
 
-  // Figure time
+  // Figure time. During get-ready the figure already shows the move as a
+  // preview, timed so it flows straight on when the step starts.
   let figT = 0
   let breath: ReturnType<typeof breathAt> | null = null
   if (m.kind === 'breath' && m.pattern) {
     if (c.phase === 'work') {
       breath = breathAt(m.pattern, c.t)
       figT = breath.level
-    }
+    } else figT = breathAt(m.pattern, c.t).level
   } else if (m.anim.mode === 'hold') {
-    figT = c.phase === 'ready' ? Math.max(0, c.t - 1) : m.tempo + c.t
+    // flow into the pose a little before "go", then hold it
+    const into = Math.min(m.tempo, Math.max(1, TRANSITION - 0.8))
+    figT = c.phase === 'ready' ? (Math.min(c.t, into) / into) * m.tempo : m.tempo + c.t
   } else {
-    figT = c.phase === 'ready' ? 0 : c.t
+    // reps line up so the first rep starts exactly on "go"
+    figT = c.phase === 'ready' ? c.t - TRANSITION : c.t
   }
 
   const workLeft = st.secs - (c.phase === 'work' ? c.t : 0)
@@ -258,21 +260,6 @@ export function Player({ session, sound, onSound, view3d, figure3d, onExit, onDo
               title={m.name}
             />
           )
-          if (!view3d) return flat
-          if (figure3d === 'mannequin')
-            return (
-              <Suspense fallback={null}>
-                <Figure3D
-                  anim={m.anim}
-                  t={figT}
-                  tempo={tempo}
-                  flip={st.side === 'left'}
-                  accent={meta.color}
-                  work={workOf(m)}
-                  className="stage-fig stage-3d"
-                />
-              </Suspense>
-            )
           return (
             <Suspense fallback={flat}>
               <FigureReal
@@ -280,7 +267,7 @@ export function Player({ session, sound, onSound, view3d, figure3d, onExit, onDo
                 t={figT}
                 tempo={tempo}
                 flip={st.side === 'left'}
-                character={figure3d}
+                character={figure}
                 className="stage-fig stage-3d"
                 fallback={flat}
               />
@@ -288,9 +275,10 @@ export function Player({ session, sound, onSound, view3d, figure3d, onExit, onDo
           )
         })()}
         {c.phase === 'ready' && (
-          <div className="ready">
+          <div className="ready" aria-live="polite">
             <span>Get ready</span>
-            <b>{Math.max(1, Math.ceil(TRANSITION - c.t))}</b>
+            <b key={Math.ceil(TRANSITION - c.t)}>{Math.max(1, Math.ceil(TRANSITION - c.t))}</b>
+            <small>{st.side ? `${m.name}, ${st.side} side` : m.name}</small>
           </div>
         )}
         {c.paused && (

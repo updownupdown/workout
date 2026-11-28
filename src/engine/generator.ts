@@ -3,7 +3,7 @@ import { THEME_BY_ID } from './themes'
 
 export type FocusMode = 'balanced' | 'strength' | 'flow' | 'calm'
 export type Intensity = 'gentle' | 'steady' | 'strong'
-export type Figure3DKind = 'ava' | 'leo' | 'mannequin'
+export type Figure3DKind = 'ava' | 'leo'
 export type Target = 'any' | 'upper' | 'lower' | 'core' | 'spine'
 
 export interface Settings {
@@ -17,9 +17,7 @@ export interface Settings {
   /** Optional theme preset that boosts certain moves (see themes.ts). */
   theme: string | null
   chimes: boolean
-  /** 3D figure in the player instead of the 2D mannequin. */
-  view3d: boolean
-  /** Which 3D figure: a realistic person or the simple 3D mannequin. */
+  /** Which person demonstrates the moves in the player. */
   figure3d: Figure3DKind
   /** Seconds to get into position before each step. */
   readySecs: number
@@ -34,7 +32,6 @@ export const DEFAULT_SETTINGS: Settings = {
   intensity: 'steady',
   theme: null,
   chimes: true,
-  view3d: false,
   figure3d: 'ava',
   readySecs: 7,
 }
@@ -67,6 +64,12 @@ export interface Session {
 }
 
 export const readyOf = (s: Settings) => s.readySecs ?? 7
+
+/** Get-ready choices in Settings (seconds). */
+export const READY_CHOICES = [3, 5, 7, 10]
+
+/** The figure to show, tolerating settings saved before the 2D and mannequin options were removed. */
+export const figureOf = (s: Pick<Settings, 'figure3d'>): Figure3DKind => (s.figure3d === 'leo' ? 'leo' : 'ava')
 
 // ------------------------------------------------------------------ RNG
 

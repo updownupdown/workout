@@ -1,6 +1,6 @@
-import { Bell, Box, Check, ChevronRight, Download, EyeOff, Heart, LayoutGrid, PenLine, type LucideIcon } from 'lucide-react'
+import { Bell, Check, ChevronRight, Download, EyeOff, Heart, LayoutGrid, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Figure3DKind, Prefs, Settings } from '../engine/generator'
+import { Figure3DKind, figureOf, Prefs, READY_CHOICES, Settings } from '../engine/generator'
 import { Sheet } from '../ui/Sheet'
 import { Segmented } from '../ui/Choice'
 
@@ -17,38 +17,25 @@ interface Props {
 const FIGURES: { id: Figure3DKind; label: string }[] = [
   { id: 'ava', label: 'Ava' },
   { id: 'leo', label: 'Leo' },
-  { id: 'mannequin', label: 'Mannequin' },
 ]
 
 const thumb = (id: Figure3DKind) => `${import.meta.env.BASE_URL}figures/${id}.webp`
 
 /** Start downloading a realistic figure as soon as it is picked. */
 function warm(id: Figure3DKind) {
-  if (id === 'mannequin') return
   void import('../figure/real/scene').then((m) => m.preloadCharacter(id)).catch(() => {})
 }
 
 export function SettingsSheet({ settings, prefs, onSettings, onPrefs, onLibrary, onInstall, onClose }: Props) {
   const set = (p: Partial<Settings>) => onSettings({ ...settings, ...p })
-  const figure = settings.figure3d ?? 'ava'
+  const figure = figureOf(settings)
 
   return (
     <Sheet title="Settings" onClose={onClose} className="sheet-lg">
       <div className="settings-v2">
         <Section title="Figure">
-          <Segmented
-            label="Figure view"
-            options={[
-              { id: '2d', label: '2D', icon: PenLine },
-              { id: '3d', label: '3D', icon: Box },
-            ]}
-            value={settings.view3d ? '3d' : '2d'}
-            onPick={(v) => {
-              set({ view3d: v === '3d' })
-              if (v === '3d') warm(figure)
-            }}
-          />
-          <div className={`figure-cards ${settings.view3d ? '' : 'dim'}`} role="radiogroup" aria-label="3D figure">
+          <p className="set-note">Who demonstrates each move in the player.</p>
+          <div className="figure-cards" role="radiogroup" aria-label="Figure">
             {FIGURES.map((f) => {
               const on = figure === f.id
               return (
@@ -59,7 +46,7 @@ export function SettingsSheet({ settings, prefs, onSettings, onPrefs, onLibrary,
                   aria-checked={on}
                   className={`figure-card ${on ? 'on' : ''}`}
                   onClick={() => {
-                    set({ figure3d: f.id, view3d: true })
+                    set({ figure3d: f.id })
                     warm(f.id)
                   }}
                 >
@@ -84,7 +71,7 @@ export function SettingsSheet({ settings, prefs, onSettings, onPrefs, onLibrary,
             <span className="set-label">Get-ready time</span>
             <Segmented
               label="Get-ready time"
-              options={[5, 7, 10].map((s) => ({ id: s, label: `${s} s` }))}
+              options={READY_CHOICES.map((s) => ({ id: s, label: `${s} s` }))}
               value={settings.readySecs}
               onPick={(s) => set({ readySecs: s })}
             />
