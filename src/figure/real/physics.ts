@@ -66,6 +66,8 @@ const ALLOWED = new Set([
   'L.upperArm|chest', 'R.upperArm|chest', 'L.thigh|abdomen', 'R.thigh|abdomen',
   // thighs rest on each other and on the belly in deep folds; hands may hold anything
   'L.thigh|R.thigh',
+  // arms overhead or hands behind the head: upper arms and forearms lie against the head
+  'L.upperArm|head', 'R.upperArm|head', 'L.forearm|head', 'R.forearm|head',
 ])
 const pairKey = (a: string, b: string) => (ALLOWED.has(`${a}|${b}`) || ALLOWED.has(`${b}|${a}`))
 
@@ -107,7 +109,7 @@ export function limitErrors(p: Pose) {
   for (const [k, [lo, hi]] of Object.entries(LIMITS) as [keyof Pose, [number, number]][]) {
     let v = p[k]
     // arm circles go all the way round
-    if (k === 'lSh' || k === 'rSh') v = ((((v + 170) % 360) + 360) % 360) - 170
+    if (k === 'lSh' || k === 'rSh') v = ((((v + 120) % 360) + 360) % 360) - 120
     if (v < lo) out.push({ k, over: lo - v })
     else if (v > hi) out.push({ k, over: v - hi })
   }
@@ -257,6 +259,9 @@ export class Physics {
     return out.multiplyScalar(1 / m)
   }
 
+  /** Hand capsules with a reach target in the current settle (`L.hand`, `R.hand`). */
+  holding = new Set<string>()
+
   clips(): Clip[] {
     const d = this.d
     const seg = this.caps.map((c) => {
@@ -270,6 +275,8 @@ export class Physics {
       for (let j = i + 1; j < seg.length; j++) {
         const A = seg[i], B = seg[j]
         if (pairKey(A.c.name, B.c.name)) continue
+        // a hand holding on to something is meant to touch it
+        if (this.holding.has(A.c.name) || this.holding.has(B.c.name)) continue
         const depth = A.c.r + B.c.r - segDist(A.a, A.b, B.a, B.b)
         if (depth > CLIP_TOL) out.push({ a: A.c.name, b: B.c.name, depth: depth - CLIP_TOL })
       }
@@ -337,6 +344,7 @@ export class Physics {
   settle(pose: Pose, view: View, contacts: ContactName[], opts: { balance?: boolean; reach?: Reach[] } = {}): { pose: Pose; before: number; after: number } {
     const d = this.d
     const balance = opts.balance ?? true
+    this.holding = new Set((opts.reach ?? []).filter((r) => !r.from).map((r) => `${r.hand}.hand`))
     const energy = (p: Pose) => {
       d.pose(p, view)
       const low = d.lowest()

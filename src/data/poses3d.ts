@@ -41,8 +41,8 @@ const SOLES_TOGETHER: PoseInput[] = [
 const HANDS_ON_KNEES: PoseInput = { lSh: 12, rSh: 12, lShX: 48, rShX: 48, lEl: 22, rEl: 22, lShTw: -50, rShTw: -50 }
 /** Hands clasped in front of the chest (front view). */
 const PRAYER: PoseInput = { lSh: 15, rSh: 15, lShX: 50, rShX: 50, lEl: 100, rEl: 100, lShTw: -90, rShTw: -90 }
-/** Hands laced behind the head, elbows wide (side view, relative to the trunk). */
-const HANDS_BEHIND_HEAD: PoseInput = { lSh: 170, rSh: 170, lShX: 55, rShX: 55, lEl: 140, rEl: 140 }
+/** Hands laced behind the head, elbows wide (side view, relative to the trunk). Fitted to elbow and wrist targets. */
+const HANDS_BEHIND_HEAD: PoseInput = { lSh: 192, rSh: 192, lShX: 35, rShX: 35, lShTw: -90, rShTw: -90, lEl: 110, rEl: 110 }
 /** Lying on the back, arms resting on the floor by the sides. */
 const ARMS_DOWN: PoseInput = { lSh: -8, rSh: -8, lShX: 18, rShX: 18, lEl: 0, rEl: 0 }
 /** Hands on the hips, elbows out and back (side view). Fitted to elbow and wrist targets. */
@@ -104,6 +104,23 @@ export const FIX3D: Record<string, Fix3D> = {
   },
   'db-upright-row': { frames: [null, ROW_TOP] },
   'hip-hinge': { frames: both(HANDS_ON_HIPS, 2) },
+  // knees wide, palms together at the chest with the elbows inside the knees
+  garland: { frames: [null, { lHipX: 35, rHipX: 35, lHipTw: 30, rHipTw: 30, lSh: 35, rSh: 35, lEl: 110, rEl: 110, lShX: 15, rShX: 15 }], reach: [null, PALMS] },
+  // hands on the low back (the heels are out of reach of this trunk's arch)
+  // thighs upright with the hips over the knees, toes tucked; hands on the low back
+  camel: {
+    frames: [null, { ...HANDS_ON_HIPS, lSh: -25, rSh: -25, lAnk: 50, rAnk: 50, rot: -6 }],
+    contacts: [['rKnee', 'rToe'], ['rKnee', 'lKnee', 'rToe', 'lToe']],
+  },
+  // sole against the standing thigh, palms together overhead
+  tree: { reach: [null, [{ hand: 'L', from: 'L_Foot', to: 'R_Thigh', d: 30 }, ...PALMS]] },
+  // fold with fingertips by the feet, then a flat back with hands on the shins
+  'half-lift': {
+    reach: [
+      [{ hand: 'L', to: 'L_Foot', d: 12 }, { hand: 'R', to: 'R_Foot', d: 12 }],
+      [{ hand: 'L', to: 'L_Calf', d: 20 }, { hand: 'R', to: 'R_Calf', d: 20 }],
+    ],
+  },
   'happy-baby': { frames: [ARMS_DOWN, null], touch: [HANDS, null], reach: [null, ON_FEET] },
   'rolling-ball': { reach: both(ON_SHINS, 2) },
   dancer: { reach: [null, [{ hand: 'R', to: 'R_Foot', d: 7 }]] },
@@ -111,7 +128,12 @@ export const FIX3D: Record<string, Fix3D> = {
 
   // hands behind the head: elbows out to the sides
   'good-morning': { frames: both(HANDS_BEHIND_HEAD, 2), reach: both(ON_HEAD, 2) },
-  bicycle: { frames: [{ ...HANDS_BEHIND_HEAD, twist: -28 }, { ...HANDS_BEHIND_HEAD, twist: 28 }], reach: both(ON_HEAD, 2) },
+  // shoulders curl off the floor; only the low back and pelvis stay down
+  bicycle: {
+    frames: [{ ...HANDS_BEHIND_HEAD, twist: -28 }, { ...HANDS_BEHIND_HEAD, twist: 28 }],
+    contacts: [['pelvis'], ['pelvis']],
+    reach: both(ON_HEAD, 2),
+  },
 
   // lying down: arms rest on the floor
   savasana: { frames: [ARMS_DOWN, ARMS_DOWN], touch: hands(2) },
