@@ -35,9 +35,10 @@ const HANDS_BEHIND_HEAD: PoseInput = { lSh: 170, rSh: 170, lShX: 55, rShX: 55, l
 const ARMS_DOWN: PoseInput = { lSh: -8, rSh: -8, lShX: 18, rShX: 18, lEl: 0, rEl: 0 }
 const HANDS: ContactName[] = ['lHand', 'rHand']
 
-const ON_KNEES: Reach[] = [{ hand: 'L', to: 'L_Calf', d: 9 }, { hand: 'R', to: 'R_Calf', d: 9 }]
+const ON_KNEES: Reach[] = [{ hand: 'L', to: 'L_Calf', d: 13 }, { hand: 'R', to: 'R_Calf', d: 13 }]
 const ON_FEET: Reach[] = [{ hand: 'L', to: 'L_Foot', d: 7 }, { hand: 'R', to: 'R_Foot', d: 7 }]
-const ON_HEAD: Reach[] = [{ hand: 'L', to: 'Head', d: 11 }, { hand: 'R', to: 'Head', d: 11 }]
+const ON_SHINS: Reach[] = [{ hand: 'L', to: 'L_Calf', d: 12 }, { hand: 'R', to: 'R_Calf', d: 12 }]
+const ON_HEAD: Reach[] = [{ hand: 'L', to: 'Neck', d: 13 }, { hand: 'R', to: 'Neck', d: 13 }]
 const PALMS: Reach[] = [{ hand: 'L', to: 'R_Hand', d: 6 }]
 
 const BREATH: Fix3D = {
@@ -81,7 +82,11 @@ export const FIX3D: Record<string, Fix3D> = {
     frames: [null, { rSh: 172, rEl: 150, rShTw: 90, lSh: 160, lEl: 90, lShTw: 90 }],
     reach: [null, [{ hand: 'L', to: 'R_Forearm', d: 6 }]],
   },
-  'db-upright-row': { frames: [null, { lShX: 12, rShX: 12 }] },
+  'db-upright-row': { frames: [null, { lShX: 20, rShX: 20, lShTw: -90, rShTw: -90 }] },
+  'happy-baby': { frames: [ARMS_DOWN, null], touch: [HANDS, null], reach: [null, ON_FEET] },
+  'rolling-ball': { reach: both(ON_SHINS, 2) },
+  dancer: { reach: [null, [{ hand: 'R', to: 'R_Foot', d: 7 }]] },
+  'quad-stretch': { reach: [null, [{ hand: 'R', to: 'R_Foot', d: 7 }]] },
 
   // hands behind the head: elbows out to the sides
   'good-morning': { frames: both(HANDS_BEHIND_HEAD, 2), reach: both(ON_HEAD, 2) },
@@ -96,7 +101,6 @@ export const FIX3D: Record<string, Fix3D> = {
   'shoulder-bridge': { touch: hands(2) },
   'bridge-march': { touch: hands(2) },
   'knees-chest': { frames: [ARMS_DOWN, null], touch: [HANDS, null] },
-  'happy-baby': { frames: [ARMS_DOWN, null], touch: [HANDS, null] },
   'figure-four': { frames: [ARMS_DOWN, null], touch: [HANDS, null] },
   'legs-up': { frames: [ARMS_DOWN, ARMS_DOWN], touch: hands(2) },
   'leg-lifts': { frames: both(ARMS_DOWN, 2), touch: hands(2) },

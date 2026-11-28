@@ -497,13 +497,28 @@ export class Driver {
 
   /** Lowest point of the posed mesh. */
   lowest() {
-    return Math.min(this.minY(this.sample), this.minY(this.headSample) + this.headSink)
+    return Math.min(this.minY(this.sample), this.headLow())
+  }
+
+  /** Lowest point of the head, counting the give of hair only on the back of the head. */
+  private headLow() {
+    let y = Infinity
+    const p = new THREE.Vector3()
+    for (const [mi, i] of this.headSample) {
+      const v = this.vtx(mi, i, _w)
+      if (v.y < y) {
+        y = v.y
+        p.copy(v)
+      }
+    }
+    const head = this.bone('Head').getWorldPosition(new THREE.Vector3())
+    const face = this.bone('MNose').getWorldPosition(new THREE.Vector3()).sub(head)
+    return p.sub(head).dot(face) < 0 ? y + this.headSink : y
   }
 
   /** Height of a body part's lowest point (the head counts its give against the floor). */
   partY(c: ContactName) {
-    const y = this.minY(this.parts.get(c) ?? [])
-    return c === 'head' ? y + this.headSink : y
+    return c === 'head' ? this.headLow() : this.minY(this.parts.get(c) ?? [])
   }
 
   /** Re-level a keyframe so its declared floor contacts rest on the floor with this body's proportions. */

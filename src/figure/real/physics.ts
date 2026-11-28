@@ -307,9 +307,11 @@ export class Physics {
       const q = d.vtx(mi, i, _v)
       if (q.y < low + 1.2) pts.push({ x: q.x, z: q.z })
     }
-    for (const [mi, i] of d.headSample) {
-      const q = d.vtx(mi, i, _v)
-      if (q.y + d.headSink < low + 1.2) pts.push({ x: q.x, z: q.z })
+    if (d.partY('head') < low + 1.2) {
+      for (const [mi, i] of d.headSample) {
+        const q = d.vtx(mi, i, _v)
+        if (q.y < low + 1.2 + d.headSink) pts.push({ x: q.x, z: q.z })
+      }
     }
     return pts
   }
@@ -353,7 +355,9 @@ export class Physics {
       for (const l of limitErrors(p)) e += 1 * l.over * l.over
       for (const k of PARAMS) {
         const dk = p[k] - pose[k]
-        e += (COST[k] ?? 0.01) * dk * dk
+        // hands holding the head must not drag the head around
+        const c = k === 'head' && opts.reach?.length ? 0.5 : (COST[k] ?? 0.01)
+        e += c * dk * dk
       }
       for (const [l, r] of pairs) {
         const a = p[l] - pose[l] - (p[r] - pose[r])
@@ -361,7 +365,9 @@ export class Physics {
       }
       return e
     }
-    const dirs = directions(view)
+    // weight shifts over one foot only make sense standing
+    const sitting = contacts.some((c) => c === 'pelvis' || c === 'back' || c === 'mid')
+    const dirs = directions(view).filter((d) => !sitting || !d.some(([k]) => k === 'tilt' || k === 'bendX'))
     // Limbs authored as a pair (both arms or both legs moving together) stay a pair.
     const pairs = SIDE_PAIRS.filter(([l, r]) => Math.abs(pose[l] - pose[r]) < 1)
     let cur = { ...pose }
